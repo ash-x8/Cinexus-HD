@@ -1,0 +1,6 @@
+{
+  "name": "CINEXUS",
+  "description": "Next-generation premium cinematic movie and TV entertainment streaming platform with live TMDB integration, legal multi-source player, collections, user accounts, watchlists, and full admin studio.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
