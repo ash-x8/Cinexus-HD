@@ -73,8 +73,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
       setAuditLogs(logsRes);
 
       // Load custom content from api
-      const contentRes = await fetch('/api/admin/content').then(r => r.json());
-      setCustomContent(contentRes.content || []);
+      setCustomContent(await api.getAdminContent());
     } catch (e) {
       console.error(e);
       showToast('Failed to sync admin database');

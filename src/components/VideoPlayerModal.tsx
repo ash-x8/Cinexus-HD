@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { MovieItem } from '../types';
 import { PlayerWatermark } from './player/PlayerWatermark';
-import { parseEmbedCode } from '../services/embedParser';
+import { getPlaybackSources, parseEmbedCode, PlaybackSource } from '../services/embedParser';
 import { BRANDING } from '../config/branding';
 
 interface VideoPlayerModalProps {
@@ -50,6 +50,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [showControls, setShowControls] = useState(true);
   const [ambientGlow, setAmbientGlow] = useState(true);
   const [playerError, setPlayerError] = useState<string | null>(null);
+  const [selectedSourceIndex, setSelectedSourceIndex] = useState(0);
+  const [isSourceLoading, setIsSourceLoading] = useState(true);
 
   // Settings menu states
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
@@ -69,23 +71,46 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     : undefined;
 
   // Determine media source / embed
-  const rawStreamInput = currentEpisode?.videoUrl || movie.demoVideoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
-  const parsed = parseEmbedCode(rawStreamInput);
+  const rawStreamInput = currentEpisode?.videoUrl || movie.demoVideoUrl;
+  const playbackSources = getPlaybackSources(rawStreamInput, {
+    sources: currentEpisode?.sources || movie.sources,
+    servers: movie.servers,
+    trailerYoutubeId: movie.trailerYoutubeId
+  });
+  const fallbackSource: PlaybackSource = {
+    id: 'sample-fallback',
+    title: 'Sample Preview',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    type: 'video',
+    providerName: 'Google Cloud sample'
+  };
+  const activeSource = playbackSources[selectedSourceIndex] || playbackSources[0] || fallbackSource;
+  const parsed = parseEmbedCode(activeSource.url);
 
-  const isIframeEmbed = parsed.isValid && (
-    rawStreamInput.includes('<iframe') || 
-    rawStreamInput.includes('embed') || 
-    rawStreamInput.includes('youtube.com') ||
-    rawStreamInput.includes('vimeo.com') ||
-    rawStreamInput.includes('streamtape') ||
-    rawStreamInput.includes('multiembed') ||
-    rawStreamInput.includes('embed.su')
-  );
+  const isIframeEmbed = activeSource.type === 'iframe';
 
   const calculatedAspectRatio = parsed.embed?.aspectRatio || (16 / 9);
 
   // Controls timer
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sourceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const advanceToNextSource = () => {
+    if (selectedSourceIndex < playbackSources.length - 1) {
+      setSelectedSourceIndex(index => index + 1);
+      setPlayerError(null);
+      setIsSourceLoading(true);
+      return;
+    }
+    setIsSourceLoading(false);
+    setPlayerError('Every configured source failed. Try the official trailer or check back later.');
+  };
+
+  const selectSource = (index: number) => {
+    setSelectedSourceIndex(index);
+    setPlayerError(null);
+    setIsSourceLoading(true);
+  };
 
   const handleMouseMove = () => {
     setShowControls(true);
@@ -99,8 +124,21 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   };
 
   useEffect(() => {
+    setSelectedSourceIndex(0);
+    setPlayerError(null);
+  }, [rawStreamInput, episodeId, movie.id]);
+
+  useEffect(() => {
     const video = videoRef.current;
-    if (!video || isIframeEmbed) return;
+    if (isIframeEmbed) {
+      sourceTimeoutRef.current = setTimeout(() => {
+        advanceToNextSource();
+      }, 9000);
+      return () => {
+        if (sourceTimeoutRef.current) clearTimeout(sourceTimeoutRef.current);
+      };
+    }
+    if (!video) return;
 
     if (initialTime > 0) {
       video.currentTime = initialTime;
@@ -113,7 +151,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       }
     };
     const handleError = () => {
-      setPlayerError('Playback stream unavailable. Please check video source or try an alternative stream.');
+      advanceToNextSource();
     };
 
     video.addEventListener('timeupdate', updateTime);
@@ -127,7 +165,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       video.removeEventListener('error', handleError);
       if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     };
-  }, [initialTime, isIframeEmbed]);
+  }, [initialTime, isIframeEmbed, selectedSourceIndex, activeSource.url]);
 
   const togglePlay = () => {
     if (isIframeEmbed) return;
@@ -262,8 +300,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               <div className="flex items-center gap-3 pt-2">
                 <button
                   onClick={() => {
-                    setPlayerError(null);
-                    if (videoRef.current) videoRef.current.load();
+                    selectSource(selectedSourceIndex);
                   }}
                   className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-2 transition-all shadow-md"
                 >
@@ -281,21 +318,37 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           ) : isIframeEmbed ? (
             <iframe
               ref={iframeRef}
-              src={parsed.embed?.src || rawStreamInput}
+              src={activeSource.url}
               title={`CINEXUS Video Player - ${movie.title}`}
               className="w-full h-full border-0 aspect-video"
               allow={parsed.embed?.allow || "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"}
               allowFullScreen={parsed.embed?.allowFullscreen ?? true}
+              onLoad={() => {
+                setIsSourceLoading(false);
+                if (sourceTimeoutRef.current) clearTimeout(sourceTimeoutRef.current);
+              }}
+              onError={advanceToNextSource}
             />
           ) : (
             <video
               ref={videoRef}
               autoPlay
               playsInline
-              src={rawStreamInput}
+              src={activeSource.url}
+              onLoadStart={() => setIsSourceLoading(true)}
+              onCanPlay={() => setIsSourceLoading(false)}
               onClick={togglePlay}
               className="w-full h-full object-contain cursor-pointer"
             />
+          )}
+
+          {isSourceLoading && !playerError && (
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center bg-black/20">
+              <div className="flex items-center gap-2 rounded-full bg-black/70 px-3 py-2 text-xs text-slate-200">
+                <RefreshCw className="h-3.5 w-3.5 animate-spin text-red-400" />
+                Loading {activeSource.title}...
+              </div>
+            </div>
           )}
 
           {/* Subtitles Overlay if enabled */}
@@ -518,6 +571,20 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           </div>
 
           <div className="space-y-2 text-xs">
+            <div>
+              <span className="text-slate-400 block mb-1">Playback Source</span>
+              <select
+                value={selectedSourceIndex}
+                onChange={(e) => selectSource(Number(e.target.value))}
+                className="w-full px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none"
+              >
+                {playbackSources.map((source, index) => (
+                  <option key={source.id} value={index}>{source.title} - {source.providerName}</option>
+                ))}
+                {playbackSources.length === 0 && <option value={0}>{fallbackSource.title}</option>}
+              </select>
+            </div>
+
             <div>
               <span className="text-slate-400 block mb-1">Quality Profile</span>
               <select

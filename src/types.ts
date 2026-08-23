@@ -31,6 +31,12 @@ export interface VideoSource {
   isDefault?: boolean;
 }
 
+export interface ServerEmbeds {
+  streamhg?: string;
+  ernvids?: string;
+  filemoon?: string;
+}
+
 export interface SubtitleTrack {
   id: string;
   label: string;
@@ -153,6 +159,8 @@ export interface MovieItem {
   sources?: VideoSource[];
   subtitles?: SubtitleTrack[];
   audioTracks?: AudioTrack[];
+  /** Authorized, admin-configured provider embeds. Never inferred from a TMDB id. */
+  servers?: ServerEmbeds;
   seasons?: SeasonItem[];
   episodes?: EpisodeItem[];
   techSpecs?: TechSpecsData;

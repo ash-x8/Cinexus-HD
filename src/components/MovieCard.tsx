@@ -58,7 +58,7 @@ export const MovieCard: React.FC<MovieCardProps> = ({
       {/* Main Poster Container */}
       <div 
         onClick={() => onOpenDetails(movie)}
-        className={`relative aspect-[2/3] w-full rounded-2xl overflow-hidden bg-slate-900 border border-slate-800/80 group-hover:border-red-500/60 shadow-lg group-hover:shadow-2xl group-hover:shadow-red-950/40 group-hover:-translate-y-1.5 transition-all duration-300 ${
+          className={`relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-900/80 border border-white/10 group-hover:border-red-500/60 shadow-lg group-hover:shadow-2xl group-hover:shadow-red-950/40 group-hover:-translate-y-1.5 transition-all duration-300 ${
           rank ? 'ml-6' : ''
         }`}
       >

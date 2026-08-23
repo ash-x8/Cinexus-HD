@@ -1,6 +1,34 @@
-import { MovieItem, UserProfile, WatchProgress, UserReview, HomepageSectionConfig, AdminStats } from '../types';
+import { MovieItem, UserProfile, WatchProgress, UserReview, HomepageSectionConfig, AdminStats, AuditLog } from '../types';
 
 const API_BASE = '/api';
+
+export async function readApiResponse<T>(res: Response): Promise<T> {
+  const contentType = res.headers.get('content-type') || '';
+  const body = await res.text();
+  let data: unknown;
+
+  try {
+    data = body ? JSON.parse(body) : {};
+  } catch {
+    const isHtml = /<html|<!doctype/i.test(body);
+    throw new Error(isHtml
+      ? `API route unavailable (${res.status}). Check the deployment server configuration.`
+      : `API returned invalid JSON (${res.status}).`);
+  }
+
+  if (!res.ok) {
+    const message = typeof data === 'object' && data !== null && 'error' in data
+      ? String((data as { error: unknown }).error)
+      : `Request failed (${res.status})`;
+    throw new Error(message);
+  }
+
+  if (!contentType.includes('application/json')) {
+    throw new Error(`API returned an unexpected content type (${contentType || 'unknown'}).`);
+  }
+
+  return data as T;
+}
 
 // Map TMDB raw item to our rich MovieItem
 export function formatTMDBItem(tmdb: any, defaultMediaType: 'movie' | 'tv' = 'movie'): MovieItem {
@@ -111,25 +139,25 @@ export const api = {
   // TMDB Endpoints
   async getTrending(mediaType: 'all' | 'movie' | 'tv' = 'all', timeWindow: 'day' | 'week' = 'week', page = 1) {
     const res = await fetch(`${API_BASE}/tmdb/trending/${mediaType}/${timeWindow}?page=${page}`);
-    const data = await res.json();
+    const data = await readApiResponse<any>(res);
     return (data.results || []).map((item: any) => formatTMDBItem(item, mediaType === 'all' ? 'movie' : mediaType));
   },
 
   async getPopular(mediaType: 'movie' | 'tv' = 'movie', page = 1) {
     const res = await fetch(`${API_BASE}/tmdb/popular/${mediaType}?page=${page}`);
-    const data = await res.json();
+    const data = await readApiResponse<any>(res);
     return (data.results || []).map((item: any) => formatTMDBItem(item, mediaType));
   },
 
   async getTopRated(mediaType: 'movie' | 'tv' = 'movie', page = 1) {
     const res = await fetch(`${API_BASE}/tmdb/top-rated/${mediaType}?page=${page}`);
-    const data = await res.json();
+    const data = await readApiResponse<any>(res);
     return (data.results || []).map((item: any) => formatTMDBItem(item, mediaType));
   },
 
   async getNowPlaying(mediaType: 'movie' | 'tv' = 'movie', page = 1) {
     const res = await fetch(`${API_BASE}/tmdb/now-playing/${mediaType}?page=${page}`);
-    const data = await res.json();
+    const data = await readApiResponse<any>(res);
     return (data.results || []).map((item: any) => formatTMDBItem(item, mediaType));
   },
 
@@ -150,7 +178,7 @@ export const api = {
 
   async search(query: string, type: 'multi' | 'movie' | 'tv' | 'person' = 'multi', page = 1) {
     const res = await fetch(`${API_BASE}/tmdb/search?query=${encodeURIComponent(query)}&type=${type}&page=${page}`);
-    const data = await res.json();
+    const data = await readApiResponse<any>(res);
     return {
       items: (data.results || []).map((item: any) => formatTMDBItem(item, type === 'tv' ? 'tv' : 'movie')),
       totalResults: data.total_results || 0,
@@ -278,12 +306,18 @@ export const api = {
   // Admin APIs
   async getAdminStats(): Promise<{ stats: AdminStats; settings: any; homepageSections: HomepageSectionConfig[] }> {
     const res = await fetch(`${API_BASE}/admin/stats`);
-    return res.json();
+    return readApiResponse(res);
+  },
+
+  async getAdminContent(): Promise<MovieItem[]> {
+    const res = await fetch(`${API_BASE}/admin/content`);
+    const data = await readApiResponse<{ content?: MovieItem[] }>(res);
+    return data.content || [];
   },
 
   async getAdminUsers(): Promise<UserProfile[]> {
     const res = await fetch(`${API_BASE}/admin/users`);
-    const data = await res.json();
+    const data = await readApiResponse<{ users?: UserProfile[] }>(res);
     return data.users || [];
   },
 
@@ -311,7 +345,7 @@ export const api = {
 
   async getAdminAuditLogs() {
     const res = await fetch(`${API_BASE}/admin/audit-logs`);
-    const data = await res.json();
+    const data = await readApiResponse<{ logs?: AuditLog[] }>(res);
     return data.logs || [];
   },
 

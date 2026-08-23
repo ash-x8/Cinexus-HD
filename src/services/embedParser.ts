@@ -1,5 +1,13 @@
-import { VideoEmbed, VideoProvider } from '../types';
+import { ServerEmbeds, VideoProvider, VideoSource } from '../types';
 import { BRANDING } from '../config/branding';
+
+export interface PlaybackSource {
+  id: string;
+  title: string;
+  url: string;
+  type: 'iframe' | 'video';
+  providerName: string;
+}
 
 export interface ParsedEmbedResult {
   isValid: boolean;
@@ -14,6 +22,75 @@ export interface ParsedEmbedResult {
     providerDomain?: string;
     providerName?: string;
   };
+}
+
+const isIframeUrl = (url: string) => /embed|youtube\.com|youtube-nocookie\.com|vimeo\.com/i.test(url);
+
+const sourceFromVideoSource = (source: VideoSource): PlaybackSource => ({
+  id: source.id,
+  title: source.title,
+  url: source.url,
+  type: source.type === 'youtube' || isIframeUrl(source.url) ? 'iframe' : 'video',
+  providerName: source.title
+});
+
+/** Creates an ordered list of user-provided, configured, and official fallback sources. */
+export function getPlaybackSources(
+  input: string | undefined,
+  options: { sources?: VideoSource[]; servers?: ServerEmbeds; trailerYoutubeId?: string } = {}
+): PlaybackSource[] {
+  const sources: PlaybackSource[] = [];
+  const add = (source: PlaybackSource) => {
+    if (source.url && !sources.some(existing => existing.url === source.url)) sources.push(source);
+  };
+
+  if (input?.trim()) {
+    const parsed = parseEmbedCode(input);
+    if (parsed.isValid && parsed.embed) {
+      add({
+        id: 'primary',
+        title: 'Server 1',
+        url: parsed.embed.src,
+        type: isIframeUrl(parsed.embed.src) ? 'iframe' : 'video',
+        providerName: parsed.embed.providerName || 'Primary source'
+      });
+    }
+  }
+
+  options.sources?.forEach(source => add(sourceFromVideoSource(source)));
+
+  const configuredServers: Array<[keyof ServerEmbeds, string]> = [
+    ['streamhg', 'Server 1 - StreamHG'],
+    ['ernvids', 'Server 2 - EarnVids'],
+    ['filemoon', 'Server 3 - FileMoon']
+  ];
+  configuredServers.forEach(([provider, title]) => {
+    const url = options.servers?.[provider];
+    if (url) {
+      const parsed = parseEmbedCode(url);
+      if (parsed.isValid && parsed.embed) {
+        add({
+          id: provider,
+          title,
+          url: parsed.embed.src,
+          type: 'iframe',
+          providerName: provider
+        });
+      }
+    }
+  });
+
+  if (options.trailerYoutubeId) {
+    add({
+      id: 'official-trailer',
+      title: 'Official Trailer',
+      url: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(options.trailerYoutubeId)}?autoplay=1&rel=0`,
+      type: 'iframe',
+      providerName: 'YouTube Official'
+    });
+  }
+
+  return sources;
 }
 
 /**

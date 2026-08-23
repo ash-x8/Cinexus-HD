@@ -14,6 +14,7 @@ import { MOVIES_DATABASE } from './data/moviesData';
 import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
 import { MovieRow } from './components/MovieRow';
+import { MovieCard } from './components/MovieCard';
 import { MovieDetailsModal } from './components/MovieDetailsModal';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { FilterSection } from './components/FilterSection';
@@ -30,6 +31,7 @@ import { MobileBottomNav } from './components/common/MobileBottomNav';
 import { Logo } from './components/common/Logo';
 import { useAuth } from './context/AuthContext';
 import { BRANDING } from './config/branding';
+import { api } from './services/api';
 
 const DEFAULT_FILTERS: FilterOptions = {
   searchQuery: '',
@@ -102,10 +104,7 @@ export const App: React.FC = () => {
   // Fetch server custom content
   const fetchServerData = useCallback(async () => {
     try {
-      const contentRes = await fetch('/api/admin/content').then(r => r.json());
-      if (contentRes.content) {
-        setServerContent(contentRes.content);
-      }
+      setServerContent(await api.getAdminContent());
     } catch {
       // Fallback
     }
@@ -406,42 +405,17 @@ export const App: React.FC = () => {
                     </button>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-3 gap-y-7 sm:gap-x-4 sm:gap-y-9">
                     {filteredCatalog.map(movie => (
-                      <div
+                      <MovieCard
                         key={movie.id}
-                        onClick={() => setSelectedMovie(movie)}
-                        className="group relative bg-slate-900/80 rounded-2xl overflow-hidden border border-slate-800 hover:border-red-500/80 transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-red-950/40 cursor-pointer flex flex-col"
-                      >
-                        <div className="relative aspect-[2/3] w-full overflow-hidden bg-slate-950">
-                          <img
-                            src={movie.posterPath || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400'}
-                            alt={movie.title}
-                            loading="lazy"
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-[#07090e] via-transparent to-transparent opacity-80" />
-                          
-                          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md border border-white/10 text-[10px] font-bold text-amber-400">
-                            ★ {movie.rating.toFixed(1)}
-                          </div>
-
-                          <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-red-600 text-[9px] font-bold text-white uppercase">
-                            {movie.quality}
-                          </div>
-                        </div>
-
-                        <div className="p-3 flex-1 flex flex-col justify-between space-y-1">
-                          <div>
-                            <h3 className="font-bold text-xs sm:text-sm text-white group-hover:text-red-400 transition-colors line-clamp-1">
-                              {movie.title}
-                            </h3>
-                            <p className="text-[10px] text-slate-400 mt-0.5">
-                              {movie.releaseYear} • {movie.genres.slice(0, 2).join(', ')}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                        movie={movie}
+                        onPlayMovie={handlePlayMovie}
+                        onOpenDetails={(m: MovieItem) => setSelectedMovie(m)}
+                        isInWatchlist={isInWatchlist}
+                        onToggleWatchlist={toggleWatchlist}
+                        watchProgress={watchProgressMap[movie.id]}
+                      />
                     ))}
                   </div>
                 )}

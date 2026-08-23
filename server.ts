@@ -445,7 +445,7 @@ app.put('/api/auth/profile', (req: Request, res: Response) => {
 // ==========================================
 
 app.get('/api/user/watchlist/:userId', (req: Request, res: Response) => {
-  const { userId } = req.params;
+  const userId = String(req.params.userId);
   const list = db.watchlist[userId] || [];
   res.json({ watchlist: list });
 });
@@ -470,9 +470,9 @@ app.delete('/api/user/watchlist', (req: Request, res: Response) => {
 });
 
 app.get('/api/user/history/:userId', (req: Request, res: Response) => {
-  const { userId } = req.params;
+  const userId = String(req.params.userId);
   const historyMap = db.watchHistory[userId] || {};
-  const historyList = Object.values(historyMap).sort((a, b) => 
+  const historyList = (Object.values(historyMap) as WatchProgress[]).sort((a, b) => 
     new Date(b.lastWatchedAt).getTime() - new Date(a.lastWatchedAt).getTime()
   );
   res.json({ history: historyList });
@@ -565,7 +565,7 @@ app.get('/api/admin/users', (req: Request, res: Response) => {
 });
 
 app.put('/api/admin/users/:userId/role', (req: Request, res: Response) => {
-  const { userId } = req.params;
+  const userId = String(req.params.userId);
   const { role, adminEmail } = req.body;
   const targetUser = db.users.find(u => u.id === userId);
   if (!targetUser) return res.status(404).json({ error: 'User not found' });
@@ -720,7 +720,7 @@ app.post('/api/admin/content', (req: Request, res: Response) => {
 });
 
 app.delete('/api/admin/content/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = String(req.params.id);
   const removed = db.customContent.find(c => c.id === id);
   db.customContent = db.customContent.filter(c => c.id !== id);
 
@@ -815,4 +815,8 @@ async function startServer() {
   });
 }
 
-startServer();
+export default app;
+
+if (process.env.VERCEL !== '1') {
+  startServer();
+}
