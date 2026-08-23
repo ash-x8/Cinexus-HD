@@ -9,8 +9,8 @@ interface AuthContextType {
   isSuperAdmin: boolean;
   watchlist: string[];
   history: WatchProgress[];
-  login: (email: string, pass: string) => Promise<void>;
-  register: (email: string, pass: string, name: string) => Promise<void>;
+  login: (email: string, pass: string) => Promise<UserProfile>;
+  register: (email: string, pass: string, name: string) => Promise<UserProfile>;
   logout: () => void;
   toggleWatchlist: (contentId: string) => Promise<void>;
   isInWatchlist: (contentId: string) => boolean;
@@ -56,16 +56,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user]);
 
-  const login = async (email: string, pass: string) => {
+  const login = async (email: string, pass: string): Promise<UserProfile> => {
     const data = await api.login(email, pass);
     setUser(data.user);
     setAuthModalOpen(false);
+    return data.user;
   };
 
-  const register = async (email: string, pass: string, name: string) => {
+  const register = async (email: string, pass: string, name: string): Promise<UserProfile> => {
     const data = await api.register(email, pass, name);
     setUser(data.user);
     setAuthModalOpen(false);
+    return data.user;
   };
 
   const logout = () => {

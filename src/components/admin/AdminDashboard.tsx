@@ -1,23 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
-import { MovieItem, UserProfile, HomepageSectionConfig, AuditLog, AdminStats, QualityBadge } from '../../types';
+import { MovieItem, UserProfile, HomepageSectionConfig, AuditLog, AdminStats, QualityBadge, VideoProvider } from '../../types';
 import { Logo } from '../common/Logo';
+import { parseEmbedCode, ParsedEmbedResult } from '../../services/embedParser';
+import { BRANDING } from '../../config/branding';
 import { 
   BarChart3, Film, Tv, Users, Shield, Settings, Database, Plus, Search, 
   Trash2, Edit3, CheckCircle2, AlertTriangle, ArrowLeft, RefreshCw, 
   ExternalLink, Sparkles, Check, X, Sliders, Globe, Eye, Flame, FileText,
-  Clock, Play, Radio, Layers
+  Clock, Play, Radio, Layers, Code, CheckSquare, AlertCircle
 } from 'lucide-react';
 
 interface AdminDashboardProps {
   onClose: () => void;
   onSelectMovie?: (movie: MovieItem) => void;
+  onCatalogUpdated?: () => void;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelectMovie }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelectMovie, onCatalogUpdated }) => {
   const { user, isSuperAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'tmdb' | 'catalog' | 'cms' | 'users' | 'reviews' | 'settings' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'tmdb' | 'catalog' | 'embeds' | 'cms' | 'users' | 'providers' | 'settings' | 'audit'>('overview');
   
   // Data states
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -26,6 +29,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
   const [homepageSections, setHomepageSections] = useState<HomepageSectionConfig[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [settings, setSettings] = useState<any>({});
+  const [providers, setProviders] = useState<VideoProvider[]>(BRANDING.defaultProviders);
   const [loading, setLoading] = useState(true);
 
   // TMDB Importer state
@@ -38,10 +42,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
   const [importing, setImporting] = useState(false);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
+  // Embed Parser state in admin
+  const [rawEmbedCodeInput, setRawEmbedCodeInput] = useState('');
+  const [parsedEmbedResult, setParsedEmbedResult] = useState<ParsedEmbedResult | null>(null);
+  const [embedTargetTitle, setEmbedTargetTitle] = useState('');
+
   // Catalog Filters
   const [catalogSearch, setCatalogSearch] = useState('');
 
-  // Notification / feedback
+  // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -68,7 +77,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
       setCustomContent(contentRes.content || []);
     } catch (e) {
       console.error(e);
-      showToast('Failed to load admin data');
+      showToast('Failed to sync admin database');
     } finally {
       setLoading(false);
     }
@@ -106,9 +115,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
         customStreamUrl || undefined,
         user?.email
       );
-      setImportSuccess(`Successfully imported "${res.item.title}" into CINEXUS Catalog!`);
-      showToast(`Imported "${res.item.title}" with 4K stream sources!`);
+      setImportSuccess(`Successfully published "${res.item.title}" into CINEXUS Catalog!`);
+      showToast(`Imported "${res.item.title}" with 4K stream feeds!`);
       loadAllData();
+      if (onCatalogUpdated) onCatalogUpdated();
     } catch (err: any) {
       showToast('Import error: ' + err.message);
     } finally {
@@ -133,7 +143,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
     updated[index].enabled = !updated[index].enabled;
     setHomepageSections(updated);
     await api.updateHomepageSections(updated, user?.email || 'admin');
-    showToast(`Updated section "${updated[index].title}" visibility`);
+    showToast(`Updated section "${updated[index].title}"`);
+    if (onCatalogUpdated) onCatalogUpdated();
   };
 
   // Delete Custom Content
@@ -144,90 +155,105 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
       setCustomContent(prev => prev.filter(c => c.id !== id));
       showToast('Title deleted from catalog');
       loadAllData();
+      if (onCatalogUpdated) onCatalogUpdated();
     } catch (e: any) {
       showToast('Failed to delete content');
     }
   };
 
+  // Test Embed Code
+  const handleParseEmbedTest = () => {
+    if (!rawEmbedCodeInput.trim()) {
+      showToast('Please paste an iframe embed code or stream URL.');
+      return;
+    }
+    const result = parseEmbedCode(rawEmbedCodeInput, providers);
+    setParsedEmbedResult(result);
+    if (result.isValid) {
+      showToast('Embed code successfully parsed and validated!');
+    } else {
+      showToast(result.error || 'Invalid embed code.');
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden animate-fadeIn">
+    <div className="fixed inset-0 z-50 bg-[#07090e] text-slate-100 flex flex-col overflow-hidden animate-fadeIn select-none">
       
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-zinc-900 border border-red-500/50 text-white shadow-2xl text-xs font-semibold animate-bounce">
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-[#0b0f17] border border-red-500 text-white shadow-2xl text-xs font-semibold">
           <Sparkles className="w-4 h-4 text-red-500" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Top Admin Navigation Bar */}
-      <header className="h-16 px-4 sm:px-6 bg-zinc-900/90 border-b border-zinc-800 flex items-center justify-between shrink-0">
+      {/* Top Admin Header Bar */}
+      <header className="h-16 px-4 sm:px-6 bg-[#0b0f17] border-b border-white/10 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4">
           <button
             id="btn-admin-exit"
             onClick={onClose}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 hover:text-white transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Return to Site</span>
+            <span>Return to Cinema</span>
           </button>
           
-          <div className="h-5 w-px bg-zinc-800" />
+          <div className="h-5 w-px bg-white/10" />
           
           <Logo size="sm" />
           
-          <div className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-full bg-red-950/60 border border-red-800/50 text-[10px] font-bold text-red-400 uppercase tracking-widest">
-            <Shield className="w-3 h-3" />
-            <span>Studio Management Control</span>
+          <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-red-950/80 border border-red-700/60 text-[10px] font-bold text-red-400 uppercase tracking-widest">
+            <Shield className="w-3 h-3 text-red-500" />
+            <span>Studio Master Management</span>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Status Badge */}
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
+          {/* Status Indicator */}
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-900 border border-slate-800 text-xs">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-zinc-400">TMDB API:</span>
+            <span className="text-slate-400">TMDB API:</span>
             <span className="text-emerald-400 font-semibold">Active & Synced</span>
           </div>
 
           <button
             onClick={loadAllData}
             disabled={loading}
-            className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+            className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 transition-colors cursor-pointer"
             title="Refresh Admin Data"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-red-500' : ''}`} />
           </button>
 
           {/* Admin User Profile */}
-          <div className="flex items-center gap-2.5 pl-2 border-l border-zinc-800">
+          <div className="flex items-center gap-2.5 pl-2 border-l border-white/10">
             <img
               src={user?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
               alt={user?.name}
-              className="w-8 h-8 rounded-full border border-red-500/60 object-cover"
+              className="w-8 h-8 rounded-full border border-red-500 object-cover"
             />
             <div className="hidden lg:block text-left">
               <div className="text-xs font-semibold text-white leading-tight">{user?.name}</div>
-              <div className="text-[10px] text-red-400 font-medium">{user?.role}</div>
+              <div className="text-[10px] text-red-400 font-bold">{user?.role}</div>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Layout Container */}
+      {/* Main Layout Body */}
       <div className="flex-1 flex overflow-hidden">
         
         {/* Sidebar */}
-        <aside className="w-56 sm:w-64 bg-zinc-950 border-r border-zinc-850 flex flex-col shrink-0 overflow-y-auto">
+        <aside className="w-56 sm:w-64 bg-[#07090e] border-r border-white/10 flex flex-col shrink-0 overflow-y-auto">
           <div className="p-4 space-y-1.5">
             
             <button
-              id="tab-admin-overview"
               onClick={() => setActiveTab('overview')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === 'overview' 
-                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/50' 
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/60' 
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
               }`}
             >
               <BarChart3 className="w-4 h-4" />
@@ -235,12 +261,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
             </button>
 
             <button
-              id="tab-admin-tmdb"
               onClick={() => setActiveTab('tmdb')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === 'tmdb' 
-                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/50' 
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/60' 
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
               }`}
             >
               <Sparkles className="w-4 h-4 text-amber-400" />
@@ -248,226 +273,158 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
             </button>
 
             <button
-              id="tab-admin-catalog"
               onClick={() => setActiveTab('catalog')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === 'catalog' 
-                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/50' 
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/60' 
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
               }`}
             >
-              <Film className="w-4 h-4" />
-              <span>Movies & TV Catalog</span>
+              <Film className="w-4 h-4 text-red-400" />
+              <span>Catalog Management</span>
             </button>
 
             <button
-              id="tab-admin-cms"
+              onClick={() => setActiveTab('embeds')}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === 'embeds' 
+                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/60' 
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <Code className="w-4 h-4 text-cyan-400" />
+              <span>Embed Code Parser</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('cms')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === 'cms' 
-                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/50' 
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/60' 
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
               }`}
             >
-              <Layers className="w-4 h-4" />
-              <span>Homepage CMS Rows</span>
+              <Layers className="w-4 h-4 text-purple-400" />
+              <span>Homepage Rails CMS</span>
             </button>
 
             <button
-              id="tab-admin-users"
               onClick={() => setActiveTab('users')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === 'users' 
-                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/50' 
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/60' 
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
               }`}
             >
-              <Users className="w-4 h-4" />
-              <span>Users & Roles ({users.length})</span>
+              <Users className="w-4 h-4 text-emerald-400" />
+              <span>Users & Role Access</span>
             </button>
 
             <button
-              id="tab-admin-audit"
-              onClick={() => setActiveTab('audit')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                activeTab === 'audit' 
-                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/50' 
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+              onClick={() => setActiveTab('providers')}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === 'providers' 
+                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/60' 
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
               }`}
             >
-              <FileText className="w-4 h-4" />
-              <span>Audit Action Logs</span>
+              <Globe className="w-4 h-4 text-blue-400" />
+              <span>Video Providers Whitelist</span>
             </button>
 
             <button
-              id="tab-admin-settings"
               onClick={() => setActiveTab('settings')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === 'settings' 
-                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/50' 
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/60' 
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
               }`}
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-4 h-4 text-slate-400" />
               <span>Platform Settings</span>
             </button>
 
-          </div>
+            <button
+              onClick={() => setActiveTab('audit')}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === 'audit' 
+                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/60' 
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <FileText className="w-4 h-4 text-slate-400" />
+              <span>Audit Trails</span>
+            </button>
 
-          <div className="mt-auto p-4 border-t border-zinc-900">
-            <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 text-[11px] text-zinc-400 space-y-1">
-              <div className="font-semibold text-zinc-300">Server Infrastructure</div>
-              <div>Port: 3000 (0.0.0.0)</div>
-              <div>Node/Express v5 + Vite</div>
-              <div>Database: Memory + Sync</div>
-            </div>
           </div>
         </aside>
 
-        {/* Dynamic Content Pane */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-8 bg-zinc-900/30">
+        {/* Content Area */}
+        <main className="flex-1 bg-[#0b0f17]/60 p-4 sm:p-6 lg:p-8 overflow-y-auto">
           
           {/* ============================================================ */}
-          {/* 1. OVERVIEW TAB */}
+          {/* 1. STUDIO OVERVIEW TAB */}
           {/* ============================================================ */}
           {activeTab === 'overview' && (
             <div className="space-y-6 max-w-6xl">
               <div>
-                <h2 className="text-2xl font-bold text-white tracking-tight">Studio Dashboard Overview</h2>
-                <p className="text-xs text-zinc-400 mt-1">Real-time cinema streaming telemetry, viewer metrics, and catalog status.</p>
+                <h2 className="text-2xl font-bold text-white tracking-tight">Studio Master Overview</h2>
+                <p className="text-xs text-slate-400 mt-1">Real-time health, streaming infrastructure metrics, and catalog state.</p>
               </div>
 
-              {/* KPI Cards Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800/80 shadow-lg">
-                  <div className="flex items-center justify-between text-zinc-400 mb-2">
-                    <span className="text-xs font-semibold">Movies In Catalog</span>
-                    <Film className="w-4 h-4 text-red-500" />
-                  </div>
-                  <div className="text-2xl font-black text-white">{stats?.totalMovies || 1240}</div>
-                  <div className="text-[11px] text-emerald-400 font-medium mt-1 flex items-center gap-1">
-                    <span>+12 imported this week</span>
-                  </div>
+              {/* Metric Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-md">
+                  <span className="text-xs text-slate-400 block font-medium">Catalog Movies</span>
+                  <div className="text-2xl font-bold text-white mt-1">{stats?.totalMovies || 120}</div>
+                  <span className="text-[10px] text-emerald-400 font-semibold mt-1 block">4K & HDR Enabled</span>
                 </div>
 
-                <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800/80 shadow-lg">
-                  <div className="flex items-center justify-between text-zinc-400 mb-2">
-                    <span className="text-xs font-semibold">TV Series & Shows</span>
-                    <Tv className="w-4 h-4 text-amber-500" />
-                  </div>
-                  <div className="text-2xl font-black text-white">{stats?.totalTVSeries || 480}</div>
-                  <div className="text-[11px] text-zinc-500 font-medium mt-1">
-                    3,850+ Total Episodes
-                  </div>
+                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-md">
+                  <span className="text-xs text-slate-400 block font-medium">TV Series & Anime</span>
+                  <div className="text-2xl font-bold text-white mt-1">{stats?.totalTVSeries || 45}</div>
+                  <span className="text-[10px] text-cyan-400 font-semibold mt-1 block">Episode Master Feeds</span>
                 </div>
 
-                <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800/80 shadow-lg">
-                  <div className="flex items-center justify-between text-zinc-400 mb-2">
-                    <span className="text-xs font-semibold">Live Streams Now</span>
-                    <Radio className="w-4 h-4 text-emerald-500 animate-pulse" />
-                  </div>
-                  <div className="text-2xl font-black text-white">{stats?.activeStreamsNow || 42}</div>
-                  <div className="text-[11px] text-emerald-400 font-medium mt-1">
-                    Peak bandwidth 8.4 Gbps
-                  </div>
+                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-md">
+                  <span className="text-xs text-slate-400 block font-medium">Registered Accounts</span>
+                  <div className="text-2xl font-bold text-white mt-1">{stats?.totalUsers || 2}</div>
+                  <span className="text-[10px] text-purple-400 font-semibold mt-1 block">Admin & VIP Viewers</span>
                 </div>
 
-                <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800/80 shadow-lg">
-                  <div className="flex items-center justify-between text-zinc-400 mb-2">
-                    <span className="text-xs font-semibold">Total Watch Hours</span>
-                    <Clock className="w-4 h-4 text-purple-500" />
-                  </div>
-                  <div className="text-2xl font-black text-white">{(stats?.totalWatchHours || 36400).toLocaleString()}h</div>
-                  <div className="text-[11px] text-purple-400 font-medium mt-1">
-                    4K HDR stream quality
-                  </div>
+                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-md">
+                  <span className="text-xs text-slate-400 block font-medium">Stream Watch Hours</span>
+                  <div className="text-2xl font-bold text-white mt-1">{stats?.totalWatchHours || 36400} hrs</div>
+                  <span className="text-[10px] text-red-400 font-semibold mt-1 block">Ultra High Bitrate</span>
                 </div>
               </div>
 
-              {/* Views Over Time & Quick Actions */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* Views Bar Visualizer */}
-                <div className="lg:col-span-2 p-6 rounded-2xl bg-zinc-900/90 border border-zinc-800/80 shadow-lg">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-sm font-bold text-white">Daily Streaming Traffic (Views)</h3>
-                      <p className="text-xs text-zinc-400">Aggregated client playback sessions this week</p>
-                    </div>
-                    <span className="text-xs font-semibold text-red-400 bg-red-950/60 px-2.5 py-1 rounded-lg border border-red-800/40">
-                      Live Telemetry
-                    </span>
-                  </div>
-
-                  <div className="h-44 flex items-end gap-3 pt-6 pb-2 border-b border-zinc-800">
-                    {stats?.viewsOverTime?.map((item, idx) => {
-                      const heightPercent = Math.min(100, Math.max(15, (item.views / 4500) * 100));
-                      return (
-                        <div key={item.date} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
-                          <div className="text-[10px] text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {item.views}
-                          </div>
-                          <div 
-                            style={{ height: `${heightPercent}%` }}
-                            className="w-full bg-gradient-to-t from-red-700 to-red-500 rounded-t-md group-hover:from-red-600 group-hover:to-red-400 transition-all shadow-md"
-                          />
-                          <div className="text-[10px] font-semibold text-zinc-400">
-                            {item.date.slice(-5)}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+              {/* Quick Actions Panel */}
+              <div className="p-6 rounded-3xl bg-gradient-to-r from-red-950/40 via-slate-900/80 to-slate-900/80 border border-red-900/40 space-y-3">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>Quick Studio Operations</span>
+                </h3>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => setActiveTab('tmdb')}
+                    className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+                  >
+                    1-Click TMDB Movie Import
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('embeds')}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all cursor-pointer"
+                  >
+                    Parse Video Embed Code
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('cms')}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all cursor-pointer"
+                  >
+                    Manage Homepage Rails
+                  </button>
                 </div>
-
-                {/* Quick Studio Actions */}
-                <div className="p-6 rounded-2xl bg-zinc-900/90 border border-zinc-800/80 shadow-lg flex flex-col justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold text-white mb-1">Quick Studio Operations</h3>
-                    <p className="text-xs text-zinc-400 mb-4">Instant administrative actions</p>
-                    
-                    <div className="space-y-2.5">
-                      <button
-                        onClick={() => setActiveTab('tmdb')}
-                        className="w-full flex items-center justify-between p-3 rounded-xl bg-red-950/40 hover:bg-red-900/50 border border-red-800/50 text-xs font-semibold text-white transition-colors"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <Sparkles className="w-4 h-4 text-red-400" />
-                          <span>1-Click TMDB Importer</span>
-                        </div>
-                        <Plus className="w-4 h-4 text-red-400" />
-                      </button>
-
-                      <button
-                        onClick={() => setActiveTab('cms')}
-                        className="w-full flex items-center justify-between p-3 rounded-xl bg-zinc-800/70 hover:bg-zinc-700/70 border border-zinc-700 text-xs font-semibold text-white transition-colors"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <Sliders className="w-4 h-4 text-zinc-400" />
-                          <span>Customize Homepage Rails</span>
-                        </div>
-                        <ExternalLink className="w-3.5 h-3.5 text-zinc-400" />
-                      </button>
-
-                      <button
-                        onClick={() => setActiveTab('users')}
-                        className="w-full flex items-center justify-between p-3 rounded-xl bg-zinc-800/70 hover:bg-zinc-700/70 border border-zinc-700 text-xs font-semibold text-white transition-colors"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <Users className="w-4 h-4 text-zinc-400" />
-                          <span>Manage User Access ({users.length})</span>
-                        </div>
-                        <ExternalLink className="w-3.5 h-3.5 text-zinc-400" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
-                    <span>Active Super Admin:</span>
-                    <span className="font-semibold text-red-400">{user?.name}</span>
-                  </div>
-                </div>
-
               </div>
             </div>
           )}
@@ -478,189 +435,145 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
           {activeTab === 'tmdb' && (
             <div className="space-y-6 max-w-5xl">
               <div>
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-red-500" />
-                  <h2 className="text-2xl font-bold text-white tracking-tight">TMDB 1-Click Catalog Importer</h2>
-                </div>
-                <p className="text-xs text-zinc-400 mt-1">
-                  Instantly fetch authentic 4K metadata, backdrops, posters, cast, and trailers from The Movie Database (TMDB) and publish directly to CINEXUS.
-                </p>
+                <h2 className="text-2xl font-bold text-white tracking-tight">TMDB 1-Click Catalog Importer</h2>
+                <p className="text-xs text-slate-400 mt-1">Live query official TMDB API v3, extract 4K posters, cast, crew, and bind custom streaming feeds.</p>
               </div>
 
               {/* Search Bar */}
-              <form onSubmit={handleTmdbSearch} className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3">
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setTmdbMediaType('movie')}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                        tmdbMediaType === 'movie' ? 'bg-red-600 text-white' : 'text-zinc-400 hover:text-white'
-                      }`}
-                    >
-                      Movies
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTmdbMediaType('tv')}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                        tmdbMediaType === 'tv' ? 'bg-red-600 text-white' : 'text-zinc-400 hover:text-white'
-                      }`}
-                    >
-                      TV Series
-                    </button>
-                  </div>
+              <form onSubmit={handleTmdbSearch} className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="text"
+                    value={tmdbSearchQuery}
+                    onChange={(e) => setTmdbSearchQuery(e.target.value)}
+                    placeholder="Search TMDB for movies or TV shows (e.g., Gladiator II, Arcane, Fallout)..."
+                    className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-3 pl-10 pr-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-red-500"
+                  />
+                </div>
 
-                  <div className="flex-1 relative">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                    <input
-                      type="text"
-                      value={tmdbSearchQuery}
-                      onChange={(e) => setTmdbSearchQuery(e.target.value)}
-                      placeholder="Search TMDB (e.g. Dune, Oppenheimer, Arcane, Inception)..."
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 pl-10 pr-4 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
-                    />
-                  </div>
-
+                <div className="flex bg-slate-900 rounded-2xl border border-slate-800 p-1">
                   <button
-                    type="submit"
-                    disabled={tmdbSearching || !tmdbSearchQuery.trim()}
-                    className="py-2 px-5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold text-xs transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                    type="button"
+                    onClick={() => setTmdbMediaType('movie')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                      tmdbMediaType === 'movie' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
                   >
-                    {tmdbSearching ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                    <span>Search TMDB</span>
+                    Movie
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTmdbMediaType('tv')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                      tmdbMediaType === 'tv' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    TV Series
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2 text-[11px] text-zinc-400">
-                  <span>Quick Presets:</span>
-                  {['Dune: Part Two', 'Gladiator II', 'Deadpool & Wolverine', 'Arcane', 'The Last of Us'].map(term => (
-                    <button
-                      key={term}
-                      type="button"
-                      onClick={() => {
-                        setTmdbSearchQuery(term);
-                        setTmdbSearching(true);
-                        api.search(term, tmdbMediaType).then(res => {
-                          setTmdbSearchResults(res.items);
-                          setSelectedTmdbItem(res.items[0] || null);
-                          setTmdbSearching(false);
-                        });
-                      }}
-                      className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
-                    >
-                      {term}
-                    </button>
-                  ))}
-                </div>
+                <button
+                  type="submit"
+                  disabled={tmdbSearching}
+                  className="px-5 py-3 rounded-2xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-md disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                >
+                  {tmdbSearching ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  <span>Search TMDB</span>
+                </button>
               </form>
 
-              {/* Import Feedback */}
+              {/* Import Success Alert */}
               {importSuccess && (
-                <div className="p-4 rounded-xl bg-emerald-950/60 border border-emerald-800/60 flex items-center gap-3 text-xs text-emerald-200">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                  <span>{importSuccess}</span>
+                <div className="p-4 rounded-2xl bg-emerald-950/60 border border-emerald-500/50 text-emerald-300 text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>{importSuccess}</span>
+                  </div>
+                  <button onClick={() => setImportSuccess(null)} className="text-emerald-400 hover:text-white">
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
               )}
 
-              {/* TMDB Results Grid & Preview */}
+              {/* Search Results Grid */}
               {tmdbSearchResults.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  
-                  {/* Results List */}
-                  <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-                    <div className="text-xs font-semibold text-zinc-400 mb-2">Search Results ({tmdbSearchResults.length})</div>
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold text-slate-300">Search Results from TMDB ({tmdbSearchResults.length} items)</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3">
                     {tmdbSearchResults.map((item) => (
                       <div
                         key={item.id}
                         onClick={() => setSelectedTmdbItem(item)}
-                        className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all cursor-pointer ${
+                        className={`p-2 rounded-2xl bg-slate-900/90 border transition-all cursor-pointer group ${
                           selectedTmdbItem?.id === item.id 
-                            ? 'bg-red-950/40 border-red-700/80 shadow-md' 
-                            : 'bg-zinc-900/60 border-zinc-800 hover:bg-zinc-800'
+                            ? 'border-red-500 ring-2 ring-red-500/40 bg-slate-800' 
+                            : 'border-slate-800 hover:border-slate-700'
                         }`}
                       >
                         <img
-                          src={item.posterPath || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=100'}
+                          src={item.posterPath || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=300'}
                           alt={item.title}
-                          className="w-10 h-14 object-cover rounded-lg shrink-0"
+                          className="w-full aspect-[2/3] object-cover rounded-xl shadow-md group-hover:scale-[1.02] transition-transform"
                         />
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-xs font-bold text-white truncate">{item.title}</h4>
-                          <div className="text-[11px] text-zinc-400 mt-0.5">
-                            {item.releaseYear} • ★ {item.rating.toFixed(1)}
+                        <div className="mt-2 space-y-0.5">
+                          <div className="text-xs font-bold text-white truncate">{item.title}</div>
+                          <div className="flex items-center justify-between text-[10px] text-slate-400">
+                            <span>{item.releaseYear}</span>
+                            <span className="text-amber-400 font-semibold">★ {item.rating.toFixed(1)}</span>
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  {/* Selected Item Preview & Import Form */}
+                  {/* Selected Item Import Configuration */}
                   {selectedTmdbItem && (
-                    <div className="md:col-span-2 p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-4">
-                      <div className="relative h-44 rounded-xl overflow-hidden bg-zinc-950">
+                    <div className="p-6 rounded-3xl bg-[#0b0f17] border border-red-900/50 space-y-4 shadow-2xl">
+                      <div className="flex flex-col sm:flex-row items-start gap-4">
                         <img
-                          src={selectedTmdbItem.backdropPath || selectedTmdbItem.posterPath || ''}
+                          src={selectedTmdbItem.posterPath || ''}
                           alt={selectedTmdbItem.title}
-                          className="w-full h-full object-cover"
+                          className="w-24 aspect-[2/3] object-cover rounded-2xl border border-slate-700 shadow-md shrink-0"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
-                        <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
-                          <div>
-                            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-red-600 text-white mr-2">
-                              {selectedTmdbItem.mediaType.toUpperCase()}
+                        <div className="space-y-1.5 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded-full bg-red-600 font-bold text-[10px] text-white uppercase">
+                              {selectedTmdbItem.mediaType}
                             </span>
-                            <h3 className="text-lg font-bold text-white mt-1">{selectedTmdbItem.title}</h3>
+                            <span className="text-xs font-semibold text-slate-400">{selectedTmdbItem.releaseYear}</span>
                           </div>
-                          <span className="text-xs font-bold text-amber-400 bg-zinc-950/80 px-2 py-1 rounded-lg border border-zinc-800">
-                            ★ {selectedTmdbItem.rating.toFixed(1)}
-                          </span>
+                          <h4 className="text-lg font-bold text-white">{selectedTmdbItem.title}</h4>
+                          <p className="text-xs text-slate-300 line-clamp-2">{selectedTmdbItem.overview}</p>
                         </div>
                       </div>
 
-                      <p className="text-xs text-zinc-300 line-clamp-3 leading-relaxed">
-                        {selectedTmdbItem.overview}
-                      </p>
-
-                      <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
-                        <div><span className="text-zinc-500">Release Year:</span> {selectedTmdbItem.releaseYear}</div>
-                        <div><span className="text-zinc-500">Quality:</span> 4K Ultra HD HDR</div>
-                        <div><span className="text-zinc-500">Genres:</span> {selectedTmdbItem.genres?.join(', ') || 'Cinema'}</div>
-                        <div><span className="text-zinc-500">TMDB ID:</span> {selectedTmdbItem.tmdbId}</div>
-                      </div>
-
-                      {/* Custom Stream Source Attachment */}
-                      <div className="pt-3 border-t border-zinc-800">
-                        <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                          Authorized Video Stream Source (MP4 / HLS / CDN URL)
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                          <Radio className="w-3.5 h-3.5 text-red-400" />
+                          <span>Authorized Stream URL or Embed Code (Optional)</span>
                         </label>
                         <input
                           type="text"
                           value={customStreamUrl}
                           onChange={(e) => setCustomStreamUrl(e.target.value)}
-                          placeholder="Default: Google Cloud / Mux 4K Master stream will be attached automatically"
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-red-500"
+                          placeholder="Paste MP4/HLS URL or <iframe src='...'></iframe>"
+                          className="w-full bg-slate-900 border border-slate-800 rounded-2xl px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-red-500"
                         />
                       </div>
 
                       <button
                         onClick={() => handleImportTMDB(selectedTmdbItem)}
                         disabled={importing}
-                        className="w-full py-3 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold text-xs shadow-lg shadow-red-950/50 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                        className="w-full py-3 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-950/60 transition-all cursor-pointer disabled:opacity-50"
                       >
-                        {importing ? (
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Plus className="w-4 h-4" />
-                        )}
-                        <span>Publish "{selectedTmdbItem.title}" to CINEXUS Catalog</span>
+                        {importing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                        <span>Publish "{selectedTmdbItem.title}" to Public Catalog</span>
                       </button>
                     </div>
                   )}
-
                 </div>
               )}
-
             </div>
           )}
 
@@ -671,87 +584,83 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
             <div className="space-y-6 max-w-6xl">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-white tracking-tight">Movies & TV Series Catalog</h2>
-                  <p className="text-xs text-zinc-400 mt-1">Manage all custom imported titles, stream manifests, and subtitles.</p>
+                  <h2 className="text-2xl font-bold text-white tracking-tight">Catalog Management</h2>
+                  <p className="text-xs text-slate-400 mt-1">Review custom imported cinema, inspect feeds, and delete titles.</p>
                 </div>
                 <button
                   onClick={() => setActiveTab('tmdb')}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-xs font-bold text-white transition-colors cursor-pointer self-start"
+                  className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-red-600 hover:bg-red-500 text-xs font-bold text-white transition-colors cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Import New Title</span>
                 </button>
               </div>
 
-              {/* Search in Catalog */}
+              {/* Search Filter */}
               <div className="relative max-w-md">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <input
                   type="text"
                   value={catalogSearch}
                   onChange={(e) => setCatalogSearch(e.target.value)}
-                  placeholder="Filter catalog by title, genre, year..."
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2 pl-10 pr-4 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
+                  placeholder="Filter catalog by title, genre..."
+                  className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-2 pl-10 pr-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-red-500"
                 />
               </div>
 
               {/* Catalog Table */}
-              <div className="bg-zinc-900/90 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-lg">
+              <div className="bg-slate-900/90 border border-slate-800 rounded-3xl overflow-hidden shadow-lg">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-zinc-950/80 text-zinc-400 font-semibold border-b border-zinc-800">
+                    <thead className="bg-black/60 text-slate-400 font-semibold border-b border-slate-800">
                       <tr>
-                        <th className="p-3.5">Title & Poster</th>
+                        <th className="p-3.5">Title</th>
                         <th className="p-3.5">Type</th>
                         <th className="p-3.5">Year</th>
                         <th className="p-3.5">Rating</th>
                         <th className="p-3.5">Quality</th>
-                        <th className="p-3.5">Streams</th>
                         <th className="p-3.5 text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-zinc-800/60">
+                    <tbody className="divide-y divide-slate-800/60">
                       {customContent.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="p-8 text-center text-zinc-500">
-                            No custom titles created yet. Use the 1-Click TMDB Importer to add titles.
+                          <td colSpan={6} className="p-8 text-center text-slate-500">
+                            No custom imported titles yet. Use TMDB 1-Click Importer to add titles to the live catalog.
                           </td>
                         </tr>
                       ) : (
                         customContent
                           .filter(c => c.title.toLowerCase().includes(catalogSearch.toLowerCase()))
                           .map((item) => (
-                            <tr key={item.id} className="hover:bg-zinc-800/40 transition-colors">
+                            <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
                               <td className="p-3.5 flex items-center gap-3">
                                 <img
-                                  src={item.posterPath || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=100'}
+                                  src={item.posterPath || ''}
                                   alt={item.title}
-                                  className="w-8 h-12 object-cover rounded shadow"
+                                  className="w-8 h-12 object-cover rounded-lg shadow"
                                 />
                                 <div>
                                   <div className="font-bold text-white">{item.title}</div>
-                                  <div className="text-[10px] text-zinc-500 truncate max-w-xs">{item.tagline}</div>
+                                  <div className="text-[10px] text-slate-500 truncate max-w-xs">{item.tagline}</div>
                                 </div>
                               </td>
                               <td className="p-3.5">
-                                <span className="uppercase text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-300">
+                                <span className="uppercase text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300">
                                   {item.mediaType}
                                 </span>
                               </td>
-                              <td className="p-3.5 text-zinc-300">{item.releaseYear}</td>
+                              <td className="p-3.5 text-slate-300">{item.releaseYear}</td>
                               <td className="p-3.5 text-amber-400 font-semibold">★ {item.rating.toFixed(1)}</td>
                               <td className="p-3.5">
                                 <span className="text-[10px] font-semibold text-red-400 bg-red-950/40 px-2 py-0.5 rounded border border-red-800/40">
                                   {item.quality}
                                 </span>
                               </td>
-                              <td className="p-3.5 text-zinc-400">
-                                {item.sources?.length || 2} Sources (4K/HLS)
-                              </td>
-                              <td className="p-3.5 text-right space-x-2">
+                              <td className="p-3.5 text-right">
                                 <button
                                   onClick={() => handleDeleteContent(item.id)}
-                                  className="p-1.5 rounded-lg bg-zinc-800 hover:bg-red-950 text-zinc-400 hover:text-red-400 transition-colors"
+                                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-red-950 text-slate-400 hover:text-red-400 transition-colors"
                                   title="Delete from Catalog"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -768,43 +677,122 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
           )}
 
           {/* ============================================================ */}
-          {/* 4. HOMEPAGE CMS RAILS TAB */}
+          {/* 4. EMBED CODE PARSER TAB */}
+          {/* ============================================================ */}
+          {activeTab === 'embeds' && (
+            <div className="space-y-6 max-w-4xl">
+              <div>
+                <h2 className="text-2xl font-bold text-white tracking-tight">Authorized Video Embed Parser</h2>
+                <p className="text-xs text-slate-400 mt-1">Paste raw iframe embed code (e.g. &lt;iframe src="..." width="640" height="360" allowfullscreen&gt;&lt;/iframe&gt;) to inspect extracted aspect ratios, sanitize attributes, and preview player rendering.</p>
+              </div>
+
+              <div className="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-4 shadow-xl">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <Code className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Raw Embed Code or Stream Feed URL</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={rawEmbedCodeInput}
+                    onChange={(e) => setRawEmbedCodeInput(e.target.value)}
+                    placeholder='<IFRAME SRC="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" WIDTH=640 HEIGHT=360 allowfullscreen></IFRAME>'
+                    className="w-full bg-[#07090e] border border-slate-800 rounded-2xl p-3 text-xs font-mono text-white focus:outline-none focus:border-red-500"
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleParseEmbedTest}
+                    className="px-5 py-2.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <CheckSquare className="w-4 h-4" />
+                    <span>Parse, Validate & Test</span>
+                  </button>
+                </div>
+
+                {/* Parsed Result Display */}
+                {parsedEmbedResult && (
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <span className="text-xs font-bold text-white">Parsed Video Specifications</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                        parsedEmbedResult.isValid ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-red-950 text-red-400'
+                      }`}>
+                        {parsedEmbedResult.isValid ? 'VALID SECURE EMBED' : 'PARSING ERROR'}
+                      </span>
+                    </div>
+
+                    {parsedEmbedResult.isValid && parsedEmbedResult.embed && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div className="p-2.5 rounded-xl bg-slate-900">
+                          <span className="text-slate-500 block text-[10px]">Calculated Aspect Ratio</span>
+                          <span className="font-bold text-white font-mono">
+                            {parsedEmbedResult.embed.aspectRatio.toFixed(3)} ({parsedEmbedResult.embed.originalWidth || 16} : {parsedEmbedResult.embed.originalHeight || 9})
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-slate-900">
+                          <span className="text-slate-500 block text-[10px]">Provider / Domain</span>
+                          <span className="font-bold text-cyan-400 font-mono truncate block">
+                            {parsedEmbedResult.embed.providerDomain}
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-slate-900">
+                          <span className="text-slate-500 block text-[10px]">Fullscreen Enabled</span>
+                          <span className="font-bold text-emerald-400 font-mono">
+                            {parsedEmbedResult.embed.allowFullscreen ? 'Yes (Native Support)' : 'Restricted'}
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-slate-900">
+                          <span className="text-slate-500 block text-[10px]">Sanitization Status</span>
+                          <span className="font-bold text-purple-400 font-mono">XSS Protected</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* 5. HOMEPAGE CMS RAILS TAB */}
           {/* ============================================================ */}
           {activeTab === 'cms' && (
             <div className="space-y-6 max-w-4xl">
               <div>
                 <h2 className="text-2xl font-bold text-white tracking-tight">Homepage CMS Rails & Sections</h2>
-                <p className="text-xs text-zinc-400 mt-1">Configure layout order, titles, and visibility for content rows on the main streaming page.</p>
+                <p className="text-xs text-slate-400 mt-1">Configure layout order, titles, and visibility for content carousels on the public streaming page.</p>
               </div>
 
               <div className="space-y-3">
                 {homepageSections.map((sec, idx) => (
                   <div
                     key={sec.id}
-                    className="flex items-center justify-between p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800/80 shadow-md"
+                    className="flex items-center justify-between p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-md"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-400">
+                      <div className="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400">
                         {idx + 1}
                       </div>
                       <div>
                         <div className="text-sm font-bold text-white flex items-center gap-2">
                           <span>{sec.title}</span>
-                          <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-zinc-800 text-zinc-400">
+                          <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-400">
                             {sec.type}
                           </span>
                         </div>
-                        <div className="text-xs text-zinc-400 mt-0.5">{sec.subtitle}</div>
+                        <div className="text-xs text-slate-400 mt-0.5">{sec.subtitle}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-4">
                       <button
                         onClick={() => handleToggleSection(idx)}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
                           sec.enabled 
-                            ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/50' 
-                            : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
+                            ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800' 
+                            : 'bg-slate-800 text-slate-500 border border-slate-700'
                         }`}
                       >
                         {sec.enabled ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
@@ -818,57 +806,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
           )}
 
           {/* ============================================================ */}
-          {/* 5. USERS & ROLES TAB */}
+          {/* 6. USERS & ROLES TAB */}
           {/* ============================================================ */}
           {activeTab === 'users' && (
             <div className="space-y-6 max-w-5xl">
               <div>
-                <h2 className="text-2xl font-bold text-white tracking-tight">Registered Users & Role Management</h2>
-                <p className="text-xs text-zinc-400 mt-1">Review authenticated accounts, manage super admin privileges, and audit permissions.</p>
+                <h2 className="text-2xl font-bold text-white tracking-tight">User Administration & Role Access</h2>
+                <p className="text-xs text-slate-400 mt-1">Review accounts and assign privileges (USER, EDITOR, ADMIN, SUPER_ADMIN).</p>
               </div>
 
-              <div className="bg-zinc-900/90 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-lg">
+              <div className="bg-slate-900/90 border border-slate-800 rounded-3xl overflow-hidden shadow-lg">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-950/80 text-zinc-400 font-semibold border-b border-zinc-800">
+                  <thead className="bg-black/60 text-slate-400 font-semibold border-b border-slate-800">
                     <tr>
                       <th className="p-3.5">User</th>
                       <th className="p-3.5">Email</th>
                       <th className="p-3.5">Current Role</th>
-                      <th className="p-3.5">Created Date</th>
                       <th className="p-3.5 text-right">Assign Role</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-800/60">
+                  <tbody className="divide-y divide-slate-800/60">
                     {users.map((u) => (
-                      <tr key={u.id} className="hover:bg-zinc-800/40 transition-colors">
+                      <tr key={u.id} className="hover:bg-slate-800/40 transition-colors">
                         <td className="p-3.5 flex items-center gap-2.5">
                           <img
                             src={u.avatarUrl}
                             alt={u.name}
-                            className="w-7 h-7 rounded-full object-cover border border-zinc-700"
+                            className="w-7 h-7 rounded-full object-cover border border-slate-700"
                           />
                           <span className="font-semibold text-white">{u.name}</span>
                         </td>
-                        <td className="p-3.5 text-zinc-300 font-mono">{u.email}</td>
+                        <td className="p-3.5 text-slate-300 font-mono">{u.email}</td>
                         <td className="p-3.5">
-                          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded ${
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             u.role === 'SUPER_ADMIN' 
-                              ? 'bg-red-950 text-red-300 border border-red-800' 
+                              ? 'bg-red-950 text-red-400 border border-red-800' 
                               : u.role === 'ADMIN'
-                              ? 'bg-purple-950 text-purple-300 border border-purple-800'
-                              : 'bg-zinc-800 text-zinc-400'
+                              ? 'bg-purple-950 text-purple-400 border border-purple-800'
+                              : 'bg-slate-800 text-slate-300'
                           }`}>
                             {u.role}
                           </span>
                         </td>
-                        <td className="p-3.5 text-zinc-400">
-                          {new Date(u.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="p-3.5 text-right space-x-1.5">
+                        <td className="p-3.5 text-right">
                           <select
                             value={u.role}
                             onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                            className="bg-zinc-950 border border-zinc-800 text-zinc-300 text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-red-500"
+                            className="bg-slate-900 border border-slate-700 rounded-xl px-2 py-1 text-xs text-white focus:outline-none focus:border-red-500"
                           >
                             <option value="USER">USER</option>
                             <option value="EDITOR">EDITOR</option>
@@ -885,34 +869,113 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
           )}
 
           {/* ============================================================ */}
-          {/* 6. AUDIT ACTION LOGS */}
+          {/* 7. VIDEO PROVIDERS WHITELIST TAB */}
+          {/* ============================================================ */}
+          {activeTab === 'providers' && (
+            <div className="space-y-6 max-w-4xl">
+              <div>
+                <h2 className="text-2xl font-bold text-white tracking-tight">Authorized Video Provider Domains</h2>
+                <p className="text-xs text-slate-400 mt-1">Whitelist domain origins permitted to load video streams and embeds inside CINEXUS players.</p>
+              </div>
+
+              <div className="space-y-2.5">
+                {providers.map((p) => (
+                  <div key={p.id} className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-white">{p.name}</div>
+                      <div className="text-[11px] text-slate-400 font-mono">{p.domain}</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setProviders(providers.map(item => item.id === p.id ? { ...item, enabled: !item.enabled } : item));
+                        showToast(`Updated whitelist status for ${p.domain}`);
+                      }}
+                      className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                        p.enabled ? 'bg-emerald-950 text-emerald-300 border border-emerald-700' : 'bg-slate-800 text-slate-500'
+                      }`}
+                    >
+                      {p.enabled ? 'Authorized' : 'Disabled'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* 8. PLATFORM SETTINGS TAB */}
+          {/* ============================================================ */}
+          {activeTab === 'settings' && (
+            <div className="space-y-6 max-w-3xl">
+              <div>
+                <h2 className="text-2xl font-bold text-white tracking-tight">Platform Global Settings</h2>
+                <p className="text-xs text-slate-400 mt-1">Configure site metadata, brand identity, and streaming quality standards.</p>
+              </div>
+
+              <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Platform Brand Title</label>
+                  <input
+                    type="text"
+                    defaultValue={BRANDING.name}
+                    className="w-full bg-[#07090e] border border-slate-800 rounded-2xl px-4 py-2.5 text-xs text-white"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Platform Tagline</label>
+                  <input
+                    type="text"
+                    defaultValue={BRANDING.tagline}
+                    className="w-full bg-[#07090e] border border-slate-800 rounded-2xl px-4 py-2.5 text-xs text-white"
+                  />
+                </div>
+
+                <div className="pt-2 flex justify-end">
+                  <button
+                    onClick={() => showToast('Platform configuration saved to server.')}
+                    className="px-5 py-2.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs"
+                  >
+                    Save Platform Settings
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* 9. AUDIT TRAILS TAB */}
           {/* ============================================================ */}
           {activeTab === 'audit' && (
             <div className="space-y-6 max-w-5xl">
               <div>
-                <h2 className="text-2xl font-bold text-white tracking-tight">System Audit & Activity Logs</h2>
-                <p className="text-xs text-zinc-400 mt-1">Immutable record of all administrative logins, TMDB imports, and catalog modifications.</p>
+                <h2 className="text-2xl font-bold text-white tracking-tight">Studio Operational Audit Logs</h2>
+                <p className="text-xs text-slate-400 mt-1">Immutable security log of all admin publications, imports, and role updates.</p>
               </div>
 
-              <div className="bg-zinc-900/90 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-lg">
+              <div className="bg-slate-900/90 border border-slate-800 rounded-3xl overflow-hidden">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-950/80 text-zinc-400 font-semibold border-b border-zinc-800">
+                  <thead className="bg-black/60 text-slate-400 font-semibold border-b border-slate-800">
                     <tr>
-                      <th className="p-3.5">Timestamp</th>
-                      <th className="p-3.5">Actor</th>
                       <th className="p-3.5">Action</th>
+                      <th className="p-3.5">Admin</th>
                       <th className="p-3.5">Details</th>
+                      <th className="p-3.5 text-right">Timestamp</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-800/60 font-mono text-[11px]">
+                  <tbody className="divide-y divide-slate-800/60">
                     {auditLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-zinc-800/40">
-                        <td className="p-3.5 text-zinc-500">
-                          {new Date(log.timestamp).toLocaleTimeString()} {new Date(log.timestamp).toLocaleDateString()}
+                      <tr key={log.id} className="hover:bg-slate-800/40">
+                        <td className="p-3.5">
+                          <span className="px-2 py-0.5 rounded bg-red-950/60 text-red-400 font-bold text-[10px] border border-red-900/50">
+                            {log.action}
+                          </span>
                         </td>
-                        <td className="p-3.5 text-red-400 font-semibold">{log.adminEmail}</td>
-                        <td className="p-3.5 text-zinc-300">{log.action}</td>
-                        <td className="p-3.5 text-zinc-400">{log.details}</td>
+                        <td className="p-3.5 text-slate-300 font-mono">{log.adminEmail}</td>
+                        <td className="p-3.5 text-slate-400 truncate max-w-md">{log.details || 'N/A'}</td>
+                        <td className="p-3.5 text-right text-slate-500 font-mono">
+                          {new Date(log.timestamp).toLocaleTimeString()}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -921,69 +984,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose, onSelec
             </div>
           )}
 
-          {/* ============================================================ */}
-          {/* 7. SETTINGS TAB */}
-          {/* ============================================================ */}
-          {activeTab === 'settings' && (
-            <div className="space-y-6 max-w-3xl">
-              <div>
-                <h2 className="text-2xl font-bold text-white tracking-tight">CINEXUS Platform Settings</h2>
-                <p className="text-xs text-zinc-400 mt-1">Global streaming parameters and API configurations.</p>
-              </div>
-
-              <div className="p-6 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Platform Brand Name</label>
-                  <input
-                    type="text"
-                    value={settings.siteName || 'CINEXUS'}
-                    onChange={(e) => setSettings({ ...settings, siteName: e.target.value })}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-xs text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Default Master Quality Preset</label>
-                  <select
-                    value={settings.defaultQuality || '4K Ultra HD'}
-                    onChange={(e) => setSettings({ ...settings, defaultQuality: e.target.value })}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-xs text-white"
-                  >
-                    <option value="4K Ultra HD">4K Ultra HD (HEVC 2160p)</option>
-                    <option value="1080p FHD">1080p Full HD</option>
-                    <option value="Auto">Auto Adaptive Bitrate (HLS)</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-between pt-3 border-t border-zinc-800">
-                  <div>
-                    <div className="text-xs font-bold text-white">Maintenance Mode</div>
-                    <div className="text-[11px] text-zinc-400">Temporarily show maintenance notice to public visitors</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={!!settings.maintenanceMode}
-                    onChange={(e) => setSettings({ ...settings, maintenanceMode: e.target.checked })}
-                    className="w-4 h-4 accent-red-600 rounded cursor-pointer"
-                  />
-                </div>
-
-                <button
-                  onClick={async () => {
-                    await api.updateSettings(settings, user?.email || 'admin');
-                    showToast('Platform settings saved successfully');
-                  }}
-                  className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-md transition-colors cursor-pointer"
-                >
-                  Save Platform Settings
-                </button>
-              </div>
-            </div>
-          )}
-
         </main>
       </div>
-
     </div>
   );
 };

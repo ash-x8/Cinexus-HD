@@ -13,13 +13,16 @@ import {
   Check, 
   Bookmark, 
   Sparkles, 
-  Tv, 
-  Sliders, 
-  Subtitles, 
-  Radio, 
-  Layers 
+  AlertCircle,
+  RefreshCw,
+  ExternalLink,
+  Shield,
+  Layers
 } from 'lucide-react';
 import { MovieItem } from '../types';
+import { PlayerWatermark } from './player/PlayerWatermark';
+import { parseEmbedCode } from '../services/embedParser';
+import { BRANDING } from '../config/branding';
 
 interface VideoPlayerModalProps {
   movie: MovieItem;
@@ -36,39 +39,52 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(initialTime);
-  const [duration, setDuration] = useState(120); // fallback 120s
+  const [duration, setDuration] = useState(120);
   const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [ambientGlow, setAmbientGlow] = useState(true);
+  const [playerError, setPlayerError] = useState<string | null>(null);
 
   // Settings menu states
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-  const [activeSettingsSubmenu, setActiveSettingsSubmenu] = useState<'main' | 'quality' | 'audio' | 'subtitles' | 'speed' | 'aspect'>('main');
-  
   const [selectedQuality, setSelectedQuality] = useState<'4K Ultra HD (2160p)' | '1080p FHD' | '720p HD' | 'Auto (Adaptive)'>('4K Ultra HD (2160p)');
   const [selectedAudio, setSelectedAudio] = useState<'Dolby Atmos 7.1' | 'DTS Digital 5.1' | 'English Stereo (Original)' | 'Director Commentary'>('Dolby Atmos 7.1');
-  const [selectedSubtitle, setSelectedSubtitle] = useState<'English [CC]' | 'Spanish (Español)' | 'French (Français)' | 'Japanese (日本語)' | 'Off'>('English [CC]');
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
-  const [aspectRatio, setAspectRatio] = useState<'cinematic' | 'standard' | 'fit'>('cinematic');
+  const [selectedSubtitle, setSelectedSubtitle] = useState<'English [CC]' | 'Sinhala [සිංහල CC]' | 'Spanish (Español)' | 'Off'>('English [CC]');
+  const [aspectRatioMode, setAspectRatioMode] = useState<'original' | '16:9' | '2.39:1' | 'fill'>('original');
 
   // Bookmarks
   const [bookmarks, setBookmarks] = useState<{ id: string; time: number; note: string }[]>([]);
   const [showBookmarkPrompt, setShowBookmarkPrompt] = useState(false);
   const [bookmarkNote, setBookmarkNote] = useState('');
 
-  // Selected episode if applicable
+  // Selected episode if TV
   const currentEpisode = episodeId 
     ? movie.episodes?.find((ep) => ep.id === episodeId) 
     : undefined;
 
-  const videoSource = currentEpisode?.videoUrl || movie.demoVideoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+  // Determine media source / embed
+  const rawStreamInput = currentEpisode?.videoUrl || movie.demoVideoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+  const parsed = parseEmbedCode(rawStreamInput);
 
-  // Controls auto-hide timer
+  const isIframeEmbed = parsed.isValid && (
+    rawStreamInput.includes('<iframe') || 
+    rawStreamInput.includes('embed') || 
+    rawStreamInput.includes('youtube.com') ||
+    rawStreamInput.includes('vimeo.com') ||
+    rawStreamInput.includes('streamtape') ||
+    rawStreamInput.includes('multiembed') ||
+    rawStreamInput.includes('embed.su')
+  );
+
+  const calculatedAspectRatio = parsed.embed?.aspectRatio || (16 / 9);
+
+  // Controls timer
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleMouseMove = () => {
@@ -84,7 +100,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || isIframeEmbed) return;
 
     if (initialTime > 0) {
       video.currentTime = initialTime;
@@ -96,19 +112,25 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         setDuration(video.duration);
       }
     };
+    const handleError = () => {
+      setPlayerError('Playback stream unavailable. Please check video source or try an alternative stream.');
+    };
 
     video.addEventListener('timeupdate', updateTime);
     video.addEventListener('loadedmetadata', updateDuration);
     video.addEventListener('ended', () => setIsPlaying(false));
+    video.addEventListener('error', handleError);
 
     return () => {
       video.removeEventListener('timeupdate', updateTime);
       video.removeEventListener('loadedmetadata', updateDuration);
+      video.removeEventListener('error', handleError);
       if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     };
-  }, [initialTime]);
+  }, [initialTime, isIframeEmbed]);
 
   const togglePlay = () => {
+    if (isIframeEmbed) return;
     if (!videoRef.current) return;
     if (isPlaying) {
       videoRef.current.pause();
@@ -120,18 +142,11 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const targetTime = parseFloat(e.target.value);
+    const time = parseFloat(e.target.value);
+    setCurrentTime(time);
     if (videoRef.current) {
-      videoRef.current.currentTime = targetTime;
-      setCurrentTime(targetTime);
+      videoRef.current.currentTime = time;
     }
-  };
-
-  const handleSkip = (seconds: number) => {
-    if (!videoRef.current) return;
-    const newTime = Math.min(Math.max(0, videoRef.current.currentTime + seconds), duration);
-    videoRef.current.currentTime = newTime;
-    setCurrentTime(newTime);
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -140,44 +155,45 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     if (videoRef.current) {
       videoRef.current.volume = val;
       videoRef.current.muted = val === 0;
-      setIsMuted(val === 0);
     }
+    setIsMuted(val === 0);
   };
 
   const toggleMute = () => {
     if (!videoRef.current) return;
     if (isMuted) {
       videoRef.current.muted = false;
-      setIsMuted(false);
       videoRef.current.volume = volume || 0.8;
+      setIsMuted(false);
     } else {
       videoRef.current.muted = true;
       setIsMuted(true);
     }
   };
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = async () => {
     if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
+    try {
+      if (!document.fullscreenElement) {
+        await containerRef.current.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch (err) {
+      console.warn('Fullscreen request bypassed:', err);
     }
-  };
-
-  const handleSpeedChange = (speed: number) => {
-    setPlaybackSpeed(speed);
-    if (videoRef.current) {
-      videoRef.current.playbackRate = speed;
-    }
-    setActiveSettingsSubmenu('main');
   };
 
   const addBookmark = () => {
     if (!bookmarkNote.trim()) return;
-    setBookmarks([...bookmarks, { id: `bm-${Date.now()}`, time: currentTime, note: bookmarkNote.trim() }]);
+    const newBm = {
+      id: `bm_${Date.now()}`,
+      time: currentTime,
+      note: bookmarkNote.trim()
+    };
+    setBookmarks([...bookmarks, newBm]);
     setBookmarkNote('');
     setShowBookmarkPrompt(false);
   };
@@ -185,8 +201,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    const hrs = Math.floor(mins / 60);
-    if (hrs > 0) {
+    if (mins >= 60) {
+      const hrs = Math.floor(mins / 60);
       return `${hrs}:${String(mins % 60).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     }
     return `${mins}:${String(secs).padStart(2, '0')}`;
@@ -201,46 +217,103 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       ref={containerRef}
       id="cinexus-video-player"
       onMouseMove={handleMouseMove}
-      className="fixed inset-0 z-50 bg-black flex items-center justify-center select-none overflow-hidden"
+      className="fixed inset-0 z-50 bg-[#07090e] flex items-center justify-center select-none overflow-hidden"
     >
-      {/* Ambient Cinema Lighting Glow behind video */}
+      {/* Ambient Cinema Lighting Glow */}
       {ambientGlow && (
         <div 
-          className="absolute inset-0 opacity-40 blur-3xl pointer-events-none transition-all duration-700"
+          className="absolute inset-0 opacity-30 blur-3xl pointer-events-none transition-all duration-700"
           style={{
-            background: 'radial-gradient(circle, rgba(229, 9, 20, 0.45) 0%, rgba(0, 229, 255, 0.25) 45%, rgba(0,0,0,0.9) 80%)'
+            background: 'radial-gradient(circle, rgba(229, 9, 20, 0.4) 0%, rgba(15, 23, 42, 0.6) 50%, rgba(7, 9, 14, 0.95) 85%)'
           }}
         />
       )}
 
-      {/* Video Element */}
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        src={videoSource}
-        onClick={togglePlay}
-        className={`w-full h-full cursor-pointer transition-all duration-300 ${
-          aspectRatio === 'cinematic' 
-            ? 'max-h-[88vh] object-contain aspect-[2.39/1]' 
-            : aspectRatio === 'standard' 
-            ? 'max-h-[92vh] object-contain aspect-video' 
-            : 'object-cover'
-        }`}
-      />
+      {/* Official CINEXUS Player Watermark Overlay */}
+      <PlayerWatermark position="top-right" opacity={0.75} />
 
-      {/* Subtitles Overlay if active */}
-      {selectedSubtitle !== 'Off' && (
-        <div className="absolute bottom-28 left-0 right-0 text-center pointer-events-none px-6 z-20">
-          <span className="inline-block bg-black/85 text-yellow-300 px-4 py-1.5 rounded-lg text-sm sm:text-base font-semibold tracking-wide shadow-lg border border-black/50">
-            [Narrator]: Welcome to Cinexus HD Master Experience.
-          </span>
+      {/* Video Content Container with exact aspect ratio preservation */}
+      <div 
+        className="relative w-full max-w-[1240px] max-h-[92vh] flex items-center justify-center transition-all duration-300 px-2 sm:px-4"
+      >
+        <div 
+          className="relative w-full overflow-hidden rounded-2xl bg-black shadow-2xl border border-white/10 flex items-center justify-center"
+          style={{
+            aspectRatio: aspectRatioMode === 'original' 
+              ? `${calculatedAspectRatio}` 
+              : aspectRatioMode === '2.39:1'
+              ? '2.39 / 1'
+              : aspectRatioMode === '16:9'
+              ? '16 / 9'
+              : 'auto'
+          }}
+        >
+          {playerError ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-950/90 text-white space-y-4">
+              <div className="w-14 h-14 rounded-full bg-red-950/60 border border-red-500/40 flex items-center justify-center text-red-500 shadow-lg">
+                <AlertCircle className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-lg font-bold text-white">Playback Stream Unavailable</h4>
+                <p className="text-xs text-slate-400 max-w-md">
+                  {playerError}
+                </p>
+              </div>
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setPlayerError(null);
+                    if (videoRef.current) videoRef.current.load();
+                  }}
+                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-2 transition-all shadow-md"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Retry Stream</span>
+                </button>
+                <button
+                  onClick={handleClose}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                >
+                  Back to Cinema
+                </button>
+              </div>
+            </div>
+          ) : isIframeEmbed ? (
+            <iframe
+              ref={iframeRef}
+              src={parsed.embed?.src || rawStreamInput}
+              title={`CINEXUS Video Player - ${movie.title}`}
+              className="w-full h-full border-0 aspect-video"
+              allow={parsed.embed?.allow || "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"}
+              allowFullScreen={parsed.embed?.allowFullscreen ?? true}
+            />
+          ) : (
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              src={rawStreamInput}
+              onClick={togglePlay}
+              className="w-full h-full object-contain cursor-pointer"
+            />
+          )}
+
+          {/* Subtitles Overlay if enabled */}
+          {selectedSubtitle !== 'Off' && !isIframeEmbed && !playerError && (
+            <div className="absolute bottom-20 left-0 right-0 text-center pointer-events-none px-6 z-20">
+              <span className="inline-block bg-black/85 text-amber-300 px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold tracking-wide shadow-lg border border-black/50">
+                {selectedSubtitle.includes('Sinhala') 
+                  ? '[සිංහල උපසිරැසි]: CINEXUS මාස්ටර් සිනමා අත්දැකීමට සාදරයෙන් පිළිගනිමු.' 
+                  : `[Narrator]: Welcome to ${BRANDING.name} Master Cinema Experience.`}
+              </span>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Top Header Bar */}
       <div 
-        className={`absolute top-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-b from-black/90 via-black/50 to-transparent flex items-center justify-between z-30 transition-opacity duration-300 ${
+        className={`absolute top-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-b from-black/90 via-black/40 to-transparent flex items-center justify-between z-30 transition-opacity duration-300 ${
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
@@ -248,7 +321,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           <button
             id="player-back-btn"
             onClick={handleClose}
-            className="p-2.5 rounded-full bg-slate-900/80 border border-slate-700 text-slate-200 hover:text-white hover:bg-slate-800 transition-all"
+            className="p-2.5 rounded-full bg-slate-900/80 border border-slate-700 text-slate-200 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
             title="Back to Catalog"
           >
             <X className="w-5 h-5" />
@@ -261,8 +334,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-cyan-300 font-medium">
                 {selectedAudio.split(' ')[0]}
               </span>
+              {isIframeEmbed && (
+                <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-[10px] text-emerald-400 font-bold">
+                  {parsed.embed?.providerName || 'AUTHORIZED EMBED'}
+                </span>
+              )}
             </div>
-            <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
+            <h3 className="text-base sm:text-lg font-bold text-white leading-tight mt-0.5">
               {movie.title}
               {currentEpisode && <span className="text-slate-300 font-normal"> — Ep {currentEpisode.episodeNumber}: {currentEpisode.title}</span>}
             </h3>
@@ -273,19 +351,19 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           {/* Ambient Glow Toggle */}
           <button
             onClick={() => setAmbientGlow(!ambientGlow)}
-            className={`p-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all ${
-              ambientGlow ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300' : 'bg-slate-900/80 border-slate-700 text-slate-400'
+            className={`p-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+              ambientGlow ? 'bg-red-600/20 border-red-500/50 text-red-300' : 'bg-slate-900/80 border-slate-700 text-slate-400'
             }`}
-            title="Toggle Ambient Cinema Glow"
+            title="Toggle Ambient Cinema Lighting"
           >
             <Sparkles className="w-4 h-4" />
-            <span className="hidden sm:inline">Ambient Mood</span>
+            <span className="hidden sm:inline">Cinema Mood</span>
           </button>
 
           {/* Bookmark Timestamp Trigger */}
           <button
             onClick={() => setShowBookmarkPrompt(true)}
-            className="p-2 rounded-xl bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-white transition-all text-xs flex items-center gap-1.5"
+            className="p-2 rounded-xl bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-white transition-all text-xs flex items-center gap-1.5 cursor-pointer"
             title="Bookmark Scene Timestamp"
           >
             <Bookmark className="w-4 h-4 text-amber-400" />
@@ -296,29 +374,35 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
       {/* Bookmark Modal Prompt */}
       {showBookmarkPrompt && (
-        <div className="absolute inset-0 z-40 bg-black/70 flex items-center justify-center p-4">
-          <div className="bg-[#0c1017] border border-slate-700 p-5 rounded-2xl max-w-sm w-full space-y-3">
-            <h4 className="text-sm font-bold text-white flex items-center gap-2">
-              <Bookmark className="w-4 h-4 text-amber-400" />
-              <span>Save Scene at {formatTime(currentTime)}</span>
-            </h4>
+        <div className="absolute inset-0 z-40 bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-[#0b0f17] border border-slate-700 p-5 rounded-2xl max-w-sm w-full space-y-3 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <Bookmark className="w-4 h-4 text-amber-400" />
+                <span>Bookmark Scene ({formatTime(currentTime)})</span>
+              </h4>
+              <button onClick={() => setShowBookmarkPrompt(false)} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             <input
               type="text"
-              placeholder="e.g. Incredible action climax, Epic score"
+              placeholder="e.g. Master duel sequence..."
               value={bookmarkNote}
               onChange={(e) => setBookmarkNote(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-red-500"
+              autoFocus
             />
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowBookmarkPrompt(false)}
-                className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white"
               >
                 Cancel
               </button>
               <button
                 onClick={addBookmark}
-                className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs"
+                className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold"
               >
                 Save
               </button>
@@ -327,324 +411,170 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         </div>
       )}
 
-      {/* Settings Menu Popup */}
-      {showSettingsMenu && (
-        <div className="absolute bottom-24 right-6 sm:right-12 z-40 w-72 bg-[#0c1017]/95 backdrop-blur-md border border-slate-800 rounded-2xl shadow-2xl p-3 text-xs text-slate-200">
-          
-          {/* Main Settings Menu */}
-          {activeSettingsSubmenu === 'main' && (
-            <div className="space-y-1">
-              <div className="px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800">
-                Playback Configuration
+      {/* Bottom Controls Bar (native video streams) */}
+      {!isIframeEmbed && (
+        <div 
+          className={`absolute bottom-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-t from-black/95 via-black/60 to-transparent z-30 transition-opacity duration-300 space-y-3 ${
+            showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+        >
+          {/* Timeline Bar */}
+          <div className="relative flex items-center group">
+            <input
+              type="range"
+              min={0}
+              max={duration || 100}
+              value={currentTime}
+              onChange={handleSeek}
+              className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-red-600 focus:outline-none"
+            />
+          </div>
+
+          {/* Controls Cluster */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={togglePlay}
+                className="p-2.5 rounded-full bg-red-600 hover:bg-red-500 text-white transition-all shadow-lg"
+              >
+                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 fill-current" />}
+              </button>
+
+              <button
+                onClick={() => {
+                  if (videoRef.current) videoRef.current.currentTime = Math.max(0, currentTime - 10);
+                }}
+                className="p-2 text-slate-300 hover:text-white"
+                title="Rewind 10s"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => {
+                  if (videoRef.current) videoRef.current.currentTime = Math.min(duration, currentTime + 10);
+                }}
+                className="p-2 text-slate-300 hover:text-white"
+                title="Forward 10s"
+              >
+                <RotateCw className="w-4 h-4" />
+              </button>
+
+              {/* Volume */}
+              <div className="flex items-center gap-2">
+                <button onClick={toggleMute} className="text-slate-300 hover:text-white">
+                  {isMuted || volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={isMuted ? 0 : volume}
+                  onChange={handleVolumeChange}
+                  className="w-16 h-1 bg-slate-700 rounded appearance-none accent-red-500"
+                />
               </div>
-              <button
-                onClick={() => setActiveSettingsSubmenu('quality')}
-                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-800 transition-colors text-left"
-              >
-                <div className="flex items-center gap-2">
-                  <Tv className="w-4 h-4 text-red-500" />
-                  <span>Quality</span>
-                </div>
-                <span className="text-slate-400 text-[11px] font-mono">{selectedQuality.split(' ')[0]}</span>
-              </button>
 
+              <div className="text-xs font-mono text-slate-300">
+                <span>{formatTime(currentTime)}</span>
+                <span className="text-slate-500"> / </span>
+                <span className="text-slate-400">{formatTime(duration)}</span>
+              </div>
+            </div>
+
+            {/* Right cluster */}
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setActiveSettingsSubmenu('audio')}
-                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-800 transition-colors text-left"
+                onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+                className={`p-2 rounded-xl border text-xs flex items-center gap-1 transition-all ${
+                  showSettingsMenu ? 'bg-red-600 text-white border-red-500' : 'bg-slate-900/80 border-slate-700 text-slate-300'
+                }`}
               >
-                <div className="flex items-center gap-2">
-                  <Radio className="w-4 h-4 text-cyan-400" />
-                  <span>Audio Stream</span>
-                </div>
-                <span className="text-slate-400 text-[11px] font-mono">{selectedAudio.split(' ')[0]}</span>
+                <Settings className="w-4 h-4" />
+                <span className="hidden sm:inline">Settings</span>
               </button>
 
               <button
-                onClick={() => setActiveSettingsSubmenu('subtitles')}
-                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-800 transition-colors text-left"
+                onClick={toggleFullscreen}
+                className="p-2 rounded-xl bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-white transition-all"
+                title="Toggle Fullscreen"
               >
-                <div className="flex items-center gap-2">
-                  <Subtitles className="w-4 h-4 text-amber-400" />
-                  <span>Subtitles</span>
-                </div>
-                <span className="text-slate-400 text-[11px]">{selectedSubtitle.split(' ')[0]}</span>
-              </button>
-
-              <button
-                onClick={() => setActiveSettingsSubmenu('speed')}
-                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-800 transition-colors text-left"
-              >
-                <div className="flex items-center gap-2">
-                  <Sliders className="w-4 h-4 text-emerald-400" />
-                  <span>Playback Speed</span>
-                </div>
-                <span className="text-slate-400 text-[11px] font-mono">{playbackSpeed}x</span>
-              </button>
-
-              <button
-                onClick={() => setActiveSettingsSubmenu('aspect')}
-                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-800 transition-colors text-left"
-              >
-                <div className="flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-purple-400" />
-                  <span>Aspect Ratio</span>
-                </div>
-                <span className="text-slate-400 text-[11px] capitalize">{aspectRatio}</span>
+                {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
               </button>
             </div>
-          )}
-
-          {/* Quality Submenu */}
-          {activeSettingsSubmenu === 'quality' && (
-            <div className="space-y-1">
-              <button 
-                onClick={() => setActiveSettingsSubmenu('main')}
-                className="text-slate-400 hover:text-white text-[11px] font-bold p-1 mb-1"
-              >
-                ← Back
-              </button>
-              {(['4K Ultra HD (2160p)', '1080p FHD', '720p HD', 'Auto (Adaptive)'] as const).map((q) => (
-                <button
-                  key={q}
-                  onClick={() => { setSelectedQuality(q); setActiveSettingsSubmenu('main'); }}
-                  className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-800 transition-colors text-left"
-                >
-                  <span>{q}</span>
-                  {selectedQuality === q && <Check className="w-3.5 h-3.5 text-red-500" />}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Audio Submenu */}
-          {activeSettingsSubmenu === 'audio' && (
-            <div className="space-y-1">
-              <button 
-                onClick={() => setActiveSettingsSubmenu('main')}
-                className="text-slate-400 hover:text-white text-[11px] font-bold p-1 mb-1"
-              >
-                ← Back
-              </button>
-              {(['Dolby Atmos 7.1', 'DTS Digital 5.1', 'English Stereo (Original)', 'Director Commentary'] as const).map((a) => (
-                <button
-                  key={a}
-                  onClick={() => { setSelectedAudio(a); setActiveSettingsSubmenu('main'); }}
-                  className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-800 transition-colors text-left"
-                >
-                  <span>{a}</span>
-                  {selectedAudio === a && <Check className="w-3.5 h-3.5 text-cyan-400" />}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Subtitles Submenu */}
-          {activeSettingsSubmenu === 'subtitles' && (
-            <div className="space-y-1">
-              <button 
-                onClick={() => setActiveSettingsSubmenu('main')}
-                className="text-slate-400 hover:text-white text-[11px] font-bold p-1 mb-1"
-              >
-                ← Back
-              </button>
-              {(['English [CC]', 'Spanish (Español)', 'French (Français)', 'Japanese (日本語)', 'Off'] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => { setSelectedSubtitle(s); setActiveSettingsSubmenu('main'); }}
-                  className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-800 transition-colors text-left"
-                >
-                  <span>{s}</span>
-                  {selectedSubtitle === s && <Check className="w-3.5 h-3.5 text-amber-400" />}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Speed Submenu */}
-          {activeSettingsSubmenu === 'speed' && (
-            <div className="space-y-1">
-              <button 
-                onClick={() => setActiveSettingsSubmenu('main')}
-                className="text-slate-400 hover:text-white text-[11px] font-bold p-1 mb-1"
-              >
-                ← Back
-              </button>
-              {[0.5, 0.75, 1, 1.25, 1.5, 2].map((spd) => (
-                <button
-                  key={spd}
-                  onClick={() => handleSpeedChange(spd)}
-                  className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-800 transition-colors text-left"
-                >
-                  <span>{spd}x {spd === 1 ? '(Normal)' : ''}</span>
-                  {playbackSpeed === spd && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Aspect Ratio Submenu */}
-          {activeSettingsSubmenu === 'aspect' && (
-            <div className="space-y-1">
-              <button 
-                onClick={() => setActiveSettingsSubmenu('main')}
-                className="text-slate-400 hover:text-white text-[11px] font-bold p-1 mb-1"
-              >
-                ← Back
-              </button>
-              {[
-                { id: 'cinematic', label: '2.39:1 Anamorphic Cinema' },
-                { id: 'standard', label: '16:9 Standard Wide' },
-                { id: 'fit', label: 'Stretch to Full Screen' }
-              ].map((asp) => (
-                <button
-                  key={asp.id}
-                  onClick={() => { setAspectRatio(asp.id as any); setActiveSettingsSubmenu('main'); }}
-                  className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-800 transition-colors text-left"
-                >
-                  <span>{asp.label}</span>
-                  {aspectRatio === asp.id && <Check className="w-3.5 h-3.5 text-purple-400" />}
-                </button>
-              ))}
-            </div>
-          )}
-
+          </div>
         </div>
       )}
 
-      {/* Bottom Controls Bar */}
-      <div 
-        className={`absolute bottom-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-t from-black via-black/80 to-transparent z-30 transition-opacity duration-300 space-y-3 ${
-          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-      >
-        {/* Scrubber Progress Bar */}
-        <div className="relative flex items-center group">
-          <input
-            id="video-scrubber"
-            type="range"
-            min={0}
-            max={duration || 100}
-            step={0.1}
-            value={currentTime}
-            onChange={handleSeek}
-            className="w-full h-1.5 bg-slate-800 hover:h-2 rounded-lg appearance-none cursor-pointer accent-red-600 transition-all"
-          />
-
-          {/* Saved Bookmarks Tick Marks */}
-          {bookmarks.map((bm) => (
-            <div
-              key={bm.id}
-              onClick={() => {
-                if (videoRef.current) {
-                  videoRef.current.currentTime = bm.time;
-                  setCurrentTime(bm.time);
-                }
-              }}
-              className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-amber-400 hover:scale-150 cursor-pointer transition-transform"
-              style={{ left: `${(bm.time / (duration || 1)) * 100}%` }}
-              title={`Bookmark: ${bm.note} (${formatTime(bm.time)})`}
-            />
-          ))}
-        </div>
-
-        {/* Action Controls Row */}
-        <div className="flex items-center justify-between text-slate-100">
-          
-          {/* Left Controls: Play, Skip, Volume, Timestamps */}
-          <div className="flex items-center gap-3 sm:gap-4">
-            
-            {/* Play/Pause */}
-            <button
-              id="player-play-toggle-btn"
-              onClick={togglePlay}
-              className="p-2.5 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-900/50 active:scale-95 transition-all"
-            >
-              {isPlaying ? <Pause className="w-5 h-5 fill-white" /> : <Play className="w-5 h-5 fill-white ml-0.5" />}
+      {/* Settings Popup Menu */}
+      {showSettingsMenu && (
+        <div className="absolute bottom-20 right-6 z-40 bg-[#0b0f17] border border-slate-700 rounded-2xl p-4 w-72 shadow-2xl space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <span className="text-xs font-bold text-white uppercase tracking-wider">Playback Master Config</span>
+            <button onClick={() => setShowSettingsMenu(false)} className="text-slate-400 hover:text-white">
+              <X className="w-3.5 h-3.5" />
             </button>
+          </div>
 
-            {/* Skip Backward 10s */}
-            <button
-              id="player-rewind-btn"
-              onClick={() => handleSkip(-10)}
-              className="text-slate-300 hover:text-white transition-colors p-1"
-              title="Rewind 10s"
-            >
-              <RotateCcw className="w-5 h-5" />
-            </button>
-
-            {/* Skip Forward 10s */}
-            <button
-              id="player-forward-btn"
-              onClick={() => handleSkip(10)}
-              className="text-slate-300 hover:text-white transition-colors p-1"
-              title="Forward 10s"
-            >
-              <RotateCw className="w-5 h-5" />
-            </button>
-
-            {/* Volume & Slider */}
-            <div className="flex items-center gap-2 group/vol">
-              <button
-                id="player-volume-mute-btn"
-                onClick={toggleMute}
-                className="text-slate-300 hover:text-white p-1"
+          <div className="space-y-2 text-xs">
+            <div>
+              <span className="text-slate-400 block mb-1">Quality Profile</span>
+              <select
+                value={selectedQuality}
+                onChange={(e) => setSelectedQuality(e.target.value as any)}
+                className="w-full px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none"
               >
-                {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-              </button>
-              <input
-                id="player-volume-slider"
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={isMuted ? 0 : volume}
-                onChange={handleVolumeChange}
-                className="w-16 sm:w-20 h-1 bg-slate-700 appearance-none rounded cursor-pointer accent-red-500"
-              />
+                <option value="4K Ultra HD (2160p)">4K Ultra HD (2160p)</option>
+                <option value="1080p FHD">1080p FHD (1080p)</option>
+                <option value="720p HD">720p HD (720p)</option>
+                <option value="Auto (Adaptive)">Auto (Adaptive Bitrate)</option>
+              </select>
             </div>
 
-            {/* Time Stamp display */}
-            <div className="text-xs font-mono text-slate-300 select-none">
-              <span>{formatTime(currentTime)}</span>
-              <span className="text-slate-500"> / </span>
-              <span>{formatTime(duration)}</span>
+            <div>
+              <span className="text-slate-400 block mb-1">Subtitles & Audio</span>
+              <select
+                value={selectedSubtitle}
+                onChange={(e) => setSelectedSubtitle(e.target.value as any)}
+                className="w-full px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none mb-1.5"
+              >
+                <option value="English [CC]">English [CC]</option>
+                <option value="Sinhala [සිංහල CC]">Sinhala [සිංහල CC]</option>
+                <option value="Spanish (Español)">Spanish (Español)</option>
+                <option value="Off">Subtitles Off</option>
+              </select>
+
+              <select
+                value={selectedAudio}
+                onChange={(e) => setSelectedAudio(e.target.value as any)}
+                className="w-full px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none"
+              >
+                <option value="Dolby Atmos 7.1">Dolby Atmos 7.1 Lossless</option>
+                <option value="DTS Digital 5.1">DTS Digital 5.1</option>
+                <option value="English Stereo (Original)">English Stereo Original</option>
+              </select>
             </div>
 
+            <div>
+              <span className="text-slate-400 block mb-1">Aspect Ratio Scaling</span>
+              <div className="grid grid-cols-3 gap-1">
+                {(['original', '16:9', '2.39:1'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setAspectRatioMode(mode)}
+                    className={`py-1 rounded-lg border text-[10px] font-semibold uppercase ${
+                      aspectRatioMode === mode ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-
-          {/* Right Controls: Settings, Fullscreen */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            
-            {/* Settings Menu Button */}
-            <button
-              id="player-settings-btn"
-              onClick={() => setShowSettingsMenu(!showSettingsMenu)}
-              className={`p-2 rounded-xl border transition-all ${
-                showSettingsMenu 
-                  ? 'bg-red-600/30 border-red-500 text-red-400' 
-                  : 'bg-slate-900/80 border-slate-700 text-slate-300 hover:text-white'
-              }`}
-              title="Audio, Subtitles & Quality"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-
-            {/* Fullscreen Button */}
-            <button
-              id="player-fullscreen-btn"
-              onClick={toggleFullscreen}
-              className="p-2 rounded-xl bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-white transition-all"
-              title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-            >
-              {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
-            </button>
-
-          </div>
-
         </div>
-
-      </div>
-
+      )}
     </div>
   );
 };

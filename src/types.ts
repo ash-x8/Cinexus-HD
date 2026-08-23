@@ -279,6 +279,47 @@ export interface AdminStats {
   viewsOverTime: { date: string; views: number }[];
 }
 
+export interface VideoEmbed {
+  id: string;
+  contentId: string;
+  episodeId?: string;
+  src: string;
+  originalWidth?: number;
+  originalHeight?: number;
+  aspectRatio: number; // e.g. 1.777 (16:9) or width/height
+  allowFullscreen: boolean;
+  allow?: string;
+  providerName?: string;
+  providerDomain?: string;
+  quality?: string;
+  status: 'active' | 'inactive' | 'error';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface VideoProvider {
+  id: string;
+  name: string;
+  domain: string;
+  enabled: boolean;
+  notes?: string;
+}
+
+export interface SiteSettings {
+  siteName: string;
+  siteTagline: string;
+  siteDescription: string;
+  logoUrl?: string;
+  badgeUrl?: string;
+  watermarkEnabled: boolean;
+  watermarkOpacity: number;
+  watermarkPosition: 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left';
+  maintenanceMode: boolean;
+  defaultQuality: string;
+  allowUserRegistrations: boolean;
+  providers: VideoProvider[];
+}
+
 export interface AuditLog {
   id: string;
   adminEmail: string;
