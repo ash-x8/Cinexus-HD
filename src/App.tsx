@@ -7,14 +7,23 @@ import {
   Tv, 
   Clapperboard, 
   Compass, 
-  Zap
+  Zap,
+  Bookmark,
+  SlidersHorizontal,
+  Search,
+  User,
+  Shield
 } from 'lucide-react';
 import { MovieItem, FilterOptions, WatchProgress } from './types';
 import { MOVIES_DATABASE } from './data/moviesData';
+import { 
+  initializeFirestoreDatabase, 
+  subscribeToMovies, 
+  subscribeToSettings 
+} from './services/firestore';
 import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
 import { MovieRow } from './components/MovieRow';
-import { MovieCard } from './components/MovieCard';
 import { MovieDetailsModal } from './components/MovieDetailsModal';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { FilterSection } from './components/FilterSection';
@@ -25,13 +34,22 @@ import { WatchlistView } from './components/WatchlistView';
 import { StatsBanner } from './components/StatsBanner';
 import { AuthModal } from './components/auth/AuthModal';
 import { SearchModal } from './components/search/SearchModal';
+import { UserProfileModal } from './components/profile/UserProfileModal';
+import { MaintenanceScreen } from './components/maintenance/MaintenanceScreen';
 import { AdminPortal } from './components/admin/AdminPortal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { MobileBottomNav } from './components/common/MobileBottomNav';
 import { Logo } from './components/common/Logo';
+import { 
+  AboutPage, 
+  ContactPage, 
+  PrivacyPolicyPage, 
+  TermsOfServicePage, 
+  GenresPage 
+} from './components/pages/StaticPages';
+import { WatchPage } from './components/pages/WatchPage';
 import { useAuth } from './context/AuthContext';
 import { BRANDING } from './config/branding';
-import { api } from './services/api';
 
 const DEFAULT_FILTERS: FilterOptions = {
   searchQuery: '',
@@ -45,7 +63,7 @@ const DEFAULT_FILTERS: FilterOptions = {
 };
 
 export const App: React.FC = () => {
-  const { user } = useAuth();
+  const { user, openAuthModal, logout } = useAuth();
 
   // Navigation and Route State
   const [currentPath, setCurrentPath] = useState<string>(() => {
@@ -58,6 +76,8 @@ export const App: React.FC = () => {
 
   // Dynamic Custom Catalog from Server
   const [serverContent, setServerContent] = useState<MovieItem[]>([]);
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
+  const [adminBypassed, setAdminBypassed] = useState(false);
 
   // Modals state
   const [selectedMovie, setSelectedMovie] = useState<MovieItem | null>(null);
@@ -67,14 +87,55 @@ export const App: React.FC = () => {
   const [isTechSpecsOpen, setIsTechSpecsOpen] = useState(false);
   const [isDownloadsOpen, setIsDownloadsOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-  // Route Listener for `/admin` URL access
+  // Watchlist & History state
+  const [watchlist, setWatchlist] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('cinexus_watchlist');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [watchProgressMap, setWatchProgressMap] = useState<Record<string, WatchProgress>>(() => {
+    try {
+      const saved = localStorage.getItem('cinexus_watch_progress');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const navigate = (path: string) => {
+    window.history.pushState({}, '', path);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+
+  // Route Listener for all public and admin paths
   useEffect(() => {
     const handleLocationChange = () => {
       const path = window.location.pathname.toLowerCase();
       const hash = window.location.hash.toLowerCase();
       if (path === '/admin' || hash === '#/admin' || hash === '#admin') {
         setCurrentPath('/admin');
+      } else if (path.startsWith('/watch/')) {
+        setCurrentPath(path);
+      } else if (path === '/movies') {
+        setCurrentPath('/movies');
+        setActiveTab('movies');
+      } else if (path === '/tv') {
+        setCurrentPath('/tv');
+        setActiveTab('tv');
+      } else if (path === '/anime') {
+        setCurrentPath('/anime');
+        setActiveTab('anime');
+      } else if (path === '/watchlist') {
+        setCurrentPath('/watchlist');
+        setActiveTab('watchlist');
+      } else if (['/genres', '/about', '/contact', '/privacy', '/terms'].includes(path)) {
+        setCurrentPath(path);
       } else {
         setCurrentPath('/');
       }
@@ -101,139 +162,98 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Fetch server custom content
-  const fetchServerData = useCallback(async () => {
-    try {
-      setServerContent(await api.getAdminContent());
-    } catch {
-      // Fallback
-    }
-  }, []);
-
+  // Initialize and subscribe to Firestore realtime database
   useEffect(() => {
-    fetchServerData();
-  }, [fetchServerData]);
+    initializeFirestoreDatabase();
+    const unsubMovies = subscribeToMovies((liveList) => {
+      if (liveList && liveList.length > 0) {
+        setServerContent(liveList);
+      }
+    });
+    const unsubSettings = subscribeToSettings((liveSettings) => {
+      if (liveSettings) {
+        setIsMaintenanceMode(liveSettings.maintenanceMode);
+      }
+    });
+    return () => {
+      unsubMovies();
+      unsubSettings();
+    };
+  }, []);
 
   // Combined Master Catalog
   const fullCatalog = useMemo(() => {
-    const customIds = new Set(serverContent.map(c => c.id));
-    const dedupedStatic = MOVIES_DATABASE.filter(m => !customIds.has(m.id));
-    return [...serverContent, ...dedupedStatic];
+    if (serverContent.length > 0) {
+      const customIds = new Set(serverContent.map(c => c.id));
+      const staticFiltered = MOVIES_DATABASE.filter(m => !customIds.has(m.id));
+      return [...serverContent, ...staticFiltered];
+    }
+    return MOVIES_DATABASE;
   }, [serverContent]);
 
-  // Watchlist & History persistence in localStorage
-  const [watchlist, setWatchlist] = useState<MovieItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('cinexus_watchlist');
-      if (saved) {
-        const ids: string[] = JSON.parse(saved);
-        return MOVIES_DATABASE.filter(m => ids.includes(m.id));
-      }
-    } catch {}
-    return MOVIES_DATABASE.filter(m => ['dune-part-two', 'cyberpunk-edgerunners', 'oppenheimer'].includes(m.id));
-  });
+  // Watch URL matching
+  const watchMatch = currentPath.match(/^\/watch\/([^\/]+)(?:\/([^\/]+))?/);
+  const watchMovieId = watchMatch ? watchMatch[1] : null;
+  const watchEpisodeId = watchMatch ? watchMatch[2] : undefined;
+  const watchTargetMovie = watchMovieId ? fullCatalog.find(m => m.id === watchMovieId || m.slug === watchMovieId) : null;
 
-  const [watchProgressMap, setWatchProgressMap] = useState<Record<string, WatchProgress>>(() => {
-    try {
-      const saved = localStorage.getItem('cinexus_watch_progress');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return {
-      'dune-part-two': {
-        movieId: 'dune-part-two',
-        currentTime: 3450,
-        duration: 9960,
-        percentage: 35,
-        lastWatchedAt: 'Yesterday'
-      },
-      'the-last-of-us': {
-        movieId: 'the-last-of-us',
-        currentTime: 1820,
-        duration: 3180,
-        percentage: 57,
-        lastWatchedAt: '2 days ago'
-      }
-    };
-  });
-
-  // Sync watchlist to localStorage
-  useEffect(() => {
-    try {
-      const ids = watchlist.map(m => m.id);
-      localStorage.setItem('cinexus_watchlist', JSON.stringify(ids));
-    } catch {}
-  }, [watchlist]);
-
-  // Sync watch progress to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('cinexus_watch_progress', JSON.stringify(watchProgressMap));
-    } catch {}
-  }, [watchProgressMap]);
-
-  const isInWatchlist = (movieId: string) => {
-    return watchlist.some(m => m.id === movieId);
-  };
-
+  // Watchlist handlers
   const toggleWatchlist = (movie: MovieItem) => {
-    if (isInWatchlist(movie.id)) {
-      setWatchlist(prev => prev.filter(m => m.id !== movie.id));
-    } else {
-      setWatchlist(prev => [movie, ...prev]);
-    }
+    setWatchlist(prev => {
+      const next = prev.includes(movie.id) ? prev.filter(id => id !== movie.id) : [movie.id, ...prev];
+      try {
+        localStorage.setItem('cinexus_watchlist', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
-  const removeFromWatchlist = (movieId: string) => {
-    setWatchlist(prev => prev.filter(m => m.id !== movieId));
+  const isInWatchlist = (movieId: string) => watchlist.includes(movieId);
+
+  // Watch progress handlers
+  const handleSaveProgress = (progress: WatchProgress) => {
+    const progressKey = progress.movieId || progress.contentId || 'unknown';
+    setWatchProgressMap(prev => {
+      const next = { ...prev, [progressKey]: progress };
+      try {
+        localStorage.setItem('cinexus_watch_progress', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
-  // Video playback callbacks
+  // Video playback
   const handlePlayMovie = (movie: MovieItem, episodeId?: string) => {
     setActivePlayingMovie({ movie, episodeId });
+    setSelectedMovie(null);
   };
 
-  const handleCloseVideoPlayer = (finalTime: number, duration: number) => {
-    if (activePlayingMovie) {
-      const percentage = duration > 0 ? Math.min(100, Math.round((finalTime / duration) * 100)) : 0;
-      setWatchProgressMap(prev => ({
-        ...prev,
-        [activePlayingMovie.movie.id]: {
-          movieId: activePlayingMovie.movie.id,
-          currentTime: finalTime,
-          duration,
-          percentage,
-          lastWatchedAt: 'Just now'
-        }
-      }));
-    }
+  const handleCloseVideoPlayer = () => {
     setActivePlayingMovie(null);
   };
 
-  // Filter and Category segmentation
+  // Filtered Catalog
   const filteredCatalog = useMemo(() => {
     return fullCatalog.filter(movie => {
-      // Tab based filter
+      if (filters.mediaType !== 'all' && movie.mediaType !== filters.mediaType) return false;
       if (activeTab === 'movies' && movie.mediaType !== 'movie') return false;
       if (activeTab === 'tv' && movie.mediaType !== 'tv') return false;
-      if (activeTab === 'anime' && movie.mediaType !== 'anime') return false;
-      if (activeTab === 'documentary' && movie.mediaType !== 'documentary') return false;
+      if (activeTab === 'anime' && !movie.genres?.some(g => g.toLowerCase().includes('anime') || g.toLowerCase().includes('animation'))) return false;
+      if (activeTab === 'documentary' && !movie.genres?.some(g => g.toLowerCase().includes('documentary'))) return false;
 
-      // Filter Bar filters
-      if (filters.mediaType !== 'all' && movie.mediaType !== filters.mediaType) return false;
-      if (filters.genre !== 'all' && !movie.genres.includes(filters.genre)) return false;
+      if (filters.genre !== 'all' && !movie.genres?.some(g => g.toLowerCase() === filters.genre.toLowerCase())) return false;
       if (filters.quality !== 'all' && movie.quality !== filters.quality) return false;
       if (movie.rating < filters.minRating) return false;
-      if (filters.minYear && movie.releaseYear < filters.minYear) return false;
-      if (filters.maxYear && movie.releaseYear > filters.maxYear) return false;
+      if (filters.minYear !== undefined && movie.releaseYear < filters.minYear) return false;
+      if (filters.maxYear !== undefined && movie.releaseYear > filters.maxYear) return false;
 
-      // Search Query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchTitle = movie.title.toLowerCase().includes(q);
-        const matchGenre = movie.genres.some(g => g.toLowerCase().includes(q));
-        const matchCast = movie.cast?.some(c => c.name.toLowerCase().includes(q));
-        const matchDirector = movie.techSpecs?.director?.toLowerCase().includes(q);
-        if (!matchTitle && !matchGenre && !matchCast && !matchDirector) return false;
+      if (filters.searchQuery.trim()) {
+        const q = filters.searchQuery.toLowerCase();
+        const matchesTitle = movie.title.toLowerCase().includes(q);
+        const matchesDirector = movie.director?.toLowerCase().includes(q);
+        const matchesCast = movie.cast?.some(c => c.name.toLowerCase().includes(q));
+        const matchesGenre = movie.genres?.some(g => g.toLowerCase().includes(q));
+        if (!matchesTitle && !matchesDirector && !matchesCast && !matchesGenre) return false;
       }
 
       return true;
@@ -241,65 +261,52 @@ export const App: React.FC = () => {
       if (filters.sortBy === 'rating') return b.rating - a.rating;
       if (filters.sortBy === 'year') return b.releaseYear - a.releaseYear;
       if (filters.sortBy === 'title') return a.title.localeCompare(b.title);
-      return 0;
+      return (b.voteCount || 0) - (a.voteCount || 0);
     });
-  }, [fullCatalog, activeTab, filters, searchQuery]);
+  }, [fullCatalog, filters, activeTab]);
 
-  // Featured Blockbuster Heroes for carousel
-  const featuredHeroes = useMemo(() => {
-    return fullCatalog.filter(m => m.isFeaturedHero || m.rating >= 8.6);
-  }, [fullCatalog]);
+  // Curated Row Subsets
+  const trendingNow = useMemo(() => fullCatalog.filter(m => m.isTrending), [fullCatalog]);
+  const sinhalaSubtitled = useMemo(() => fullCatalog.filter(m => m.subtitles?.some(s => s.language === 'si' || s.label.includes('Sinhala'))), [fullCatalog]);
+  const fourKMasters = useMemo(() => fullCatalog.filter(m => m.quality === '4K Ultra HD' || m.quality === 'IMAX Enhanced'), [fullCatalog]);
+  const sciFiCyberpunk = useMemo(() => fullCatalog.filter(m => m.genres?.some(g => ['Sci-Fi', 'Cyberpunk', 'Action'].includes(g))), [fullCatalog]);
+  const natureDocumentaries = useMemo(() => fullCatalog.filter(m => m.genres?.some(g => ['Documentary', 'Nature'].includes(g))), [fullCatalog]);
+  const continueWatching = useMemo(() => {
+    return Object.values(watchProgressMap)
+      .map(p => ({ progress: p, movie: fullCatalog.find(m => m.id === p.movieId) }))
+      .filter((item): item is { progress: WatchProgress; movie: MovieItem } => !!item.movie);
+  }, [watchProgressMap, fullCatalog]);
 
-  // Row Segmentations
-  const top10Movies = useMemo(() => {
-    return fullCatalog.filter(m => m.isTop10 !== undefined).sort((a, b) => (a.isTop10 || 99) - (b.isTop10 || 99));
-  }, [fullCatalog]);
+  // ============================================================
+  // MAINTENANCE MODE VIEW (If platform is under maintenance)
+  // ============================================================
+  if (isMaintenanceMode && !adminBypassed && (!user || (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN'))) {
+    return (
+      <MaintenanceScreen
+        onAdminBypass={() => {
+          if (user && (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN')) {
+            setAdminBypassed(true);
+          } else {
+            openAuthModal();
+          }
+        }}
+      />
+    );
+  }
 
-  const continueWatchingMovies = useMemo(() => {
-    const ids = Object.keys(watchProgressMap);
-    return fullCatalog.filter(m => ids.includes(m.id));
-  }, [fullCatalog, watchProgressMap]);
-
-  const trendingBlockbusters = useMemo(() => {
-    return fullCatalog.filter(m => m.isTrendingToday || m.isTrending);
-  }, [fullCatalog]);
-
-  const sciFiCyberpunk = useMemo(() => {
-    return fullCatalog.filter(m => m.genres.includes('Sci-Fi') || m.genres.includes('Cyberpunk'));
-  }, [fullCatalog]);
-
-  const prestigeTvAndAnime = useMemo(() => {
-    return fullCatalog.filter(m => m.mediaType === 'tv' || m.mediaType === 'anime');
-  }, [fullCatalog]);
-
-  const awardWinningDrama = useMemo(() => {
-    return fullCatalog.filter(m => m.rating >= 8.5);
-  }, [fullCatalog]);
-
-  const actionThrillers = useMemo(() => {
-    return fullCatalog.filter(m => m.genres.includes('Action') || m.genres.includes('Thriller'));
-  }, [fullCatalog]);
-
-  const natureDocu = useMemo(() => {
-    return fullCatalog.filter(m => m.mediaType === 'documentary');
-  }, [fullCatalog]);
-
-  // =========================================================================
-  // ADMIN ROUTE HANDLING (/admin)
-  // When user visits /admin:
-  // - If not logged in as Admin, show AdminPortal (login gate).
-  // - If logged in as Admin, show AdminDashboard.
-  // =========================================================================
+  // ============================================================
+  // ADMIN DASHBOARD ROUTE (`/admin`)
+  // ============================================================
   if (currentPath === '/admin') {
-    const isAdminUser = user && (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN');
+    const isAdmin = user && (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN');
 
-    if (!isAdminUser) {
+    if (!isAdmin) {
       return (
         <AdminPortal
-          onSuccess={() => {
+          onAccessGranted={() => {
             setCurrentPath('/admin');
           }}
-          onExit={() => {
+          onBackToSite={() => {
             window.history.pushState({}, '', '/');
             setCurrentPath('/');
           }}
@@ -309,245 +316,303 @@ export const App: React.FC = () => {
 
     return (
       <AdminDashboard
-        onClose={() => {
+        onBackToSite={() => {
           window.history.pushState({}, '', '/');
           setCurrentPath('/');
         }}
-        onSelectMovie={(m: MovieItem) => setSelectedMovie(m)}
-        onCatalogUpdated={fetchServerData}
+        onLogout={() => {
+          logout();
+          window.history.pushState({}, '', '/');
+          setCurrentPath('/');
+        }}
       />
     );
   }
 
-  // =========================================================================
-  // MAIN PUBLIC SITE (Home, Movies, TV, Anime, Documentaries, Watchlist)
-  // Zero admin buttons or hints are exposed here.
-  // =========================================================================
+  // ============================================================
+  // MAIN CLIENT STREAMING PLATFORM
+  // ============================================================
   return (
-    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans selection:bg-red-600 selection:text-white pb-16 md:pb-0">
+    <div className="min-h-screen bg-[#07090e] text-slate-200 flex flex-col antialiased selection:bg-red-600 selection:text-white pb-20 md:pb-0">
       
-      {/* Universal Fixed Header without any admin links */}
+      {/* Top Navbar */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         movies={fullCatalog}
-        onSelectMovie={(m: MovieItem) => setSelectedMovie(m)}
+        onSelectMovie={(m) => setSelectedMovie(m)}
         onOpenSearchModal={() => setIsSearchModalOpen(true)}
         onOpenFilter={() => setIsFilterOpen(!isFilterOpen)}
         onOpenWatchlist={() => setActiveTab('watchlist')}
+        onOpenProfile={() => {
+          if (user) {
+            setIsProfileModalOpen(true);
+          } else {
+            openAuthModal();
+          }
+        }}
       />
 
-      {/* Main Streaming Content Area */}
-      <main className="flex-1 pt-16 md:pt-20">
+      {/* Main Content Body */}
+      <main className="flex-1 w-full max-w-full overflow-x-hidden">
         
-        {/* Watchlist View Tab */}
-        {activeTab === 'watchlist' ? (
-          <WatchlistView
-            watchlist={watchlist}
-            watchProgressMap={watchProgressMap}
-            onPlayMovie={handlePlayMovie}
-            onOpenDetails={(m: MovieItem) => setSelectedMovie(m)}
-            onRemoveFromWatchlist={removeFromWatchlist}
-            onBrowseCatalog={() => setActiveTab('home')}
+        {/* Watch Route: /watch/:id or /watch/:id/:episodeId */}
+        {currentPath.startsWith('/watch/') && watchTargetMovie ? (
+          <WatchPage
+            movie={watchTargetMovie}
+            initialEpisodeId={watchEpisodeId}
+            onBack={() => navigate('/')}
+            onSelectMovie={(m) => navigate(`/watch/${m.id}`)}
+            isInWatchlist={isInWatchlist}
+            onToggleWatchlist={toggleWatchlist}
+            onSaveProgress={handleSaveProgress}
+            allMovies={fullCatalog}
           />
+        ) : currentPath === '/about' ? (
+          <AboutPage onBack={() => navigate('/')} />
+        ) : currentPath === '/contact' ? (
+          <ContactPage onBack={() => navigate('/')} />
+        ) : currentPath === '/privacy' ? (
+          <PrivacyPolicyPage onBack={() => navigate('/')} />
+        ) : currentPath === '/terms' ? (
+          <TermsOfServicePage onBack={() => navigate('/')} />
+        ) : currentPath === '/genres' ? (
+          <GenresPage 
+            onBack={() => navigate('/')} 
+            onSelectGenre={(genre) => {
+              setFilters({ ...DEFAULT_FILTERS, genre });
+              navigate('/movies');
+              setActiveTab('movies');
+            }} 
+          />
+        ) : activeTab === 'watchlist' ? (
+          <div className="pt-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+            <WatchlistView
+              watchlist={fullCatalog.filter(m => watchlist.includes(m.id))}
+              watchlistIds={watchlist}
+              allMovies={fullCatalog}
+              watchProgressMap={watchProgressMap}
+              onSelectMovie={(m: MovieItem) => setSelectedMovie(m)}
+              onOpenDetails={(m: MovieItem) => setSelectedMovie(m)}
+              onPlayMovie={handlePlayMovie}
+              onRemoveFromWatchlist={(id) => {
+                setWatchlist(prev => prev.filter(item => item !== id));
+              }}
+              onBrowseCatalog={() => setActiveTab('home')}
+            />
+          </div>
         ) : (
           <>
-            {/* Filter Section Panel (if toggled) */}
-            <FilterSection
-              filters={filters}
-              setFilters={setFilters}
-              resetFilters={() => setFilters(DEFAULT_FILTERS)}
-              isOpen={isFilterOpen}
-              totalFilteredCount={filteredCatalog.length}
-            />
+            {/* Hero Cinema Showcase (Home Tab Only) */}
+            {activeTab === 'home' && !filters.searchQuery && (
+              <HeroBanner
+                featuredMovies={fullCatalog.filter(m => m.isFeatured).slice(0, 5)}
+                onPlayMovie={handlePlayMovie}
+                onOpenDetails={(m) => setSelectedMovie(m)}
+                onToggleWatchlist={toggleWatchlist}
+                isInWatchlist={isInWatchlist}
+              />
+            )}
 
-            {/* Filtered Grid or Categorized Rails */}
-            {isFilterOpen || searchQuery.trim() || activeTab !== 'home' ? (
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-                
-                {/* Header */}
-                <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+            {/* Filter Drawer / Accordion */}
+            {isFilterOpen && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20">
+                <FilterSection
+                  filters={filters}
+                  setFilters={setFilters}
+                  onReset={() => setFilters(DEFAULT_FILTERS)}
+                  resultCount={filteredCatalog.length}
+                />
+              </div>
+            )}
+
+            {/* Filtered Grid View vs Standard Curated Rows */}
+            {filters.searchQuery || filters.genre !== 'all' || filters.quality !== 'all' || activeTab !== 'home' ? (
+              <div className="pt-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
                   <div>
-                    <h2 className="text-xl sm:text-2xl font-bold text-white capitalize">
-                      {searchQuery ? `Search results for "${searchQuery}"` : activeTab === 'home' ? 'Filtered Cinema Collection' : `${activeTab} Master Catalog`}
-                    </h2>
-                    <p className="text-xs text-slate-400">
-                      Showing {filteredCatalog.length} titles in 4K Ultra HD & Dolby Atmos
+                    <h1 className="text-xl sm:text-2xl font-black text-white capitalize tracking-tight flex items-center gap-2">
+                      {activeTab === 'movies' && <Film className="w-6 h-6 text-red-500" />}
+                      {activeTab === 'tv' && <Tv className="w-6 h-6 text-cyan-400" />}
+                      {activeTab === 'anime' && <Sparkles className="w-6 h-6 text-purple-400" />}
+                      {activeTab === 'documentary' && <Compass className="w-6 h-6 text-emerald-400" />}
+                      <span>{activeTab === 'home' ? 'Filtered Cinema Results' : `${activeTab} Master Catalog`}</span>
+                    </h1>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Showing {filteredCatalog.length} 4K Ultra HD titles matched to your criteria.
                     </p>
                   </div>
 
                   <button
-                    onClick={() => {
-                      setSearchQuery('');
-                      setFilters(DEFAULT_FILTERS);
-                    }}
-                    className="text-xs text-red-400 hover:text-red-300 font-semibold"
+                    onClick={() => setFilters(DEFAULT_FILTERS)}
+                    className="self-start sm:self-auto px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-300 hover:text-white"
                   >
-                    Clear Filters
+                    Clear All Filters
                   </button>
                 </div>
 
-                {/* Grid */}
-                {filteredCatalog.length === 0 ? (
-                  <div className="text-center py-20 bg-slate-900/40 rounded-3xl border border-slate-800 space-y-3">
-                    <Film className="w-12 h-12 text-slate-600 mx-auto" />
-                    <h3 className="text-lg font-bold text-white">No Matching Titles Found</h3>
-                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                      Try adjusting your search criteria, quality filters, or search the global 4K TMDB catalog.
-                    </p>
-                    <button
-                      onClick={() => setIsSearchModalOpen(true)}
-                      className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-xs font-bold text-white transition-all shadow-md"
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+                  {filteredCatalog.map(movie => (
+                    <div
+                      key={movie.id}
+                      onClick={() => setSelectedMovie(movie)}
+                      className="group cursor-pointer rounded-2xl overflow-hidden bg-slate-900/80 border border-slate-800 hover:border-red-600 transition-all hover:scale-[1.03] hover:shadow-xl hover:shadow-red-950/40 flex flex-col"
                     >
-                      Search TMDB Live Catalog
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-3 gap-y-7 sm:gap-x-4 sm:gap-y-9">
-                    {filteredCatalog.map(movie => (
-                      <MovieCard
-                        key={movie.id}
-                        movie={movie}
-                        onPlayMovie={handlePlayMovie}
-                        onOpenDetails={(m: MovieItem) => setSelectedMovie(m)}
-                        isInWatchlist={isInWatchlist}
-                        onToggleWatchlist={toggleWatchlist}
-                        watchProgress={watchProgressMap[movie.id]}
-                      />
-                    ))}
-                  </div>
-                )}
+                      <div className="relative aspect-[2/3] overflow-hidden bg-slate-950">
+                        <img
+                          src={movie.posterPath || movie.posterUrl || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400'}
+                          alt={movie.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          loading="lazy"
+                        />
+                        <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur-md border border-white/10 text-[9px] font-bold text-red-400 uppercase">
+                          {movie.quality || '4K'}
+                        </div>
+                        <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur-md text-[9px] font-bold text-amber-400">
+                          ★ {movie.rating}
+                        </div>
+                      </div>
+                      <div className="p-2.5 flex-1 flex flex-col justify-between">
+                        <h4 className="text-xs font-bold text-white group-hover:text-red-400 truncate transition-colors">
+                          {movie.title}
+                        </h4>
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+                          <span>{movie.releaseYear}</span>
+                          <span className="uppercase text-[9px] font-semibold">{movie.mediaType}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : (
-              /* Standard Homepage Rows */
-              <div className="space-y-8 sm:space-y-12 pb-12">
+              /* Standard Curated Rows */
+              <div className="space-y-10 py-6 sm:py-8">
                 
-                {/* High-Impact Hero Banner Carousel */}
-                <HeroBanner
-                  featuredMovies={featuredHeroes}
+                {/* Continue Watching Row */}
+                {continueWatching.length > 0 && (
+                  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-3">
+                    <h3 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2">
+                      <Flame className="w-4 h-4 text-red-500" />
+                      <span>Continue Streaming</span>
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      {continueWatching.slice(0, 5).map(({ movie, progress }) => {
+                        const percent = progress.duration > 0 ? (progress.currentTime / progress.duration) * 100 : 0;
+                        return (
+                          <div
+                            key={movie.id}
+                            onClick={() => handlePlayMovie(movie)}
+                            className="group cursor-pointer rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 hover:border-red-500 transition-all p-2 space-y-2"
+                          >
+                            <div className="relative aspect-video rounded-xl overflow-hidden">
+                              <img
+                                src={movie.backdropPath || movie.posterPath || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400'}
+                                alt={movie.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                              />
+                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span className="w-8 h-8 rounded-full bg-red-600 text-white flex items-center justify-center shadow-lg">
+                                  ▶
+                                </span>
+                              </div>
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-white truncate">{movie.title}</h5>
+                              <div className="w-full h-1 bg-slate-800 rounded-full mt-1.5 overflow-hidden">
+                                <div className="h-full bg-red-600" style={{ width: `${percent}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Trending Now */}
+                <MovieRow
+                  id="trending-now"
+                  title="Trending Today Across CINEXUS"
+                  subtitle="Highest stream density & 4K viewership in real-time"
+                  icon={<Flame className="w-5 h-5 text-red-500" />}
+                  badge="HOT"
+                  movies={trendingNow}
+                  onOpenDetails={(m) => setSelectedMovie(m)}
+                  onSelectMovie={(m) => setSelectedMovie(m)}
                   onPlayMovie={handlePlayMovie}
-                  onOpenDetails={(m: MovieItem) => setSelectedMovie(m)}
                   onToggleWatchlist={toggleWatchlist}
                   isInWatchlist={isInWatchlist}
+                  watchProgressMap={watchProgressMap}
                 />
 
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 sm:space-y-12">
-                  
-                  {/* Continue Watching Row (if any progress) */}
-                  {continueWatchingMovies.length > 0 && (
-                    <MovieRow
-                      id="row-continue-watching"
-                      title="Continue Watching in 4K"
-                      subtitle="Resume from your exact timestamp across all devices"
-                      icon={<Zap className="w-5 h-5 text-amber-400" />}
-                      movies={continueWatchingMovies}
-                      watchProgressMap={watchProgressMap}
-                      onOpenDetails={(m: MovieItem) => setSelectedMovie(m)}
-                      onPlayMovie={handlePlayMovie}
-                      onToggleWatchlist={toggleWatchlist}
-                      isInWatchlist={isInWatchlist}
-                    />
-                  )}
+                {/* Sinhala Subtitles Row */}
+                <MovieRow
+                  id="sinhala-subtitles"
+                  title="Sinhala Subtitled 4K Blockbusters (සිංහල උපසිරැසි)"
+                  subtitle="Synchronized master Sinhala translation tracks"
+                  icon={<Sparkles className="w-5 h-5 text-yellow-400" />}
+                  badge="SINHALA SUB"
+                  movies={sinhalaSubtitled}
+                  onOpenDetails={(m) => setSelectedMovie(m)}
+                  onSelectMovie={(m) => setSelectedMovie(m)}
+                  onPlayMovie={handlePlayMovie}
+                  onToggleWatchlist={toggleWatchlist}
+                  isInWatchlist={isInWatchlist}
+                  watchProgressMap={watchProgressMap}
+                />
 
-                  {/* Top 10 Blockbusters in Ultra HD */}
-                  {top10Movies.length > 0 && (
-                    <MovieRow
-                      id="row-top-10"
-                      title="Top 10 Today in CINEXUS"
-                      subtitle="Most streamed 4K cinematic releases this week"
-                      icon={<Trophy className="w-5 h-5 text-amber-400" />}
-                      movies={top10Movies}
-                      isTop10={true}
-                      onOpenDetails={(m: MovieItem) => setSelectedMovie(m)}
-                      onPlayMovie={handlePlayMovie}
-                      onToggleWatchlist={toggleWatchlist}
-                      isInWatchlist={isInWatchlist}
-                    />
-                  )}
+                {/* 4K Ultra HD & IMAX Enhanced */}
+                <MovieRow
+                  id="fourk-masters"
+                  title="4K Ultra HD & IMAX Enhanced Cinema"
+                  subtitle="Master visual tracks with Dolby Vision HDR & Atmos"
+                  icon={<Trophy className="w-5 h-5 text-amber-400" />}
+                  badge="4K MASTER"
+                  movies={fourKMasters}
+                  onOpenDetails={(m) => setSelectedMovie(m)}
+                  onSelectMovie={(m) => setSelectedMovie(m)}
+                  onPlayMovie={handlePlayMovie}
+                  onToggleWatchlist={toggleWatchlist}
+                  isInWatchlist={isInWatchlist}
+                  watchProgressMap={watchProgressMap}
+                />
 
-                  {/* Trending Now */}
-                  <MovieRow
-                    id="row-trending"
-                    title="Trending Master Releases"
-                    subtitle="Dolby Vision & Lossless Audio master prints"
-                    icon={<Flame className="w-5 h-5 text-red-500" />}
-                    movies={trendingBlockbusters}
-                    onOpenDetails={(m: MovieItem) => setSelectedMovie(m)}
-                    onPlayMovie={handlePlayMovie}
-                    onToggleWatchlist={toggleWatchlist}
-                    isInWatchlist={isInWatchlist}
-                  />
+                {/* Cyberpunk & Sci-Fi */}
+                <MovieRow
+                  id="scifi-cyberpunk"
+                  title="Cyberpunk & Sci-Fi Dimensions"
+                  subtitle="Futuristic thrillers, artificial intelligence & space exploration"
+                  icon={<Zap className="w-5 h-5 text-cyan-400" />}
+                  movies={sciFiCyberpunk}
+                  onOpenDetails={(m) => setSelectedMovie(m)}
+                  onSelectMovie={(m) => setSelectedMovie(m)}
+                  onPlayMovie={handlePlayMovie}
+                  onToggleWatchlist={toggleWatchlist}
+                  isInWatchlist={isInWatchlist}
+                  watchProgressMap={watchProgressMap}
+                />
 
-                  {/* Sci-Fi & Cyberpunk */}
-                  <MovieRow
-                    id="row-scifi"
-                    title="Sci-Fi & Cyberpunk Futures"
-                    subtitle="Mind-bending visual spectacles in IMAX enhanced format"
-                    icon={<Sparkles className="w-5 h-5 text-cyan-400" />}
-                    movies={sciFiCyberpunk}
-                    onOpenDetails={(m: MovieItem) => setSelectedMovie(m)}
-                    onPlayMovie={handlePlayMovie}
-                    onToggleWatchlist={toggleWatchlist}
-                    isInWatchlist={isInWatchlist}
-                  />
+                {/* Nature Documentaries */}
+                <MovieRow
+                  id="nature-docs"
+                  title="IMAX Wildlife & Earth Expeditions"
+                  subtitle="Stunning planetary visuals captured in native 8K sensors"
+                  icon={<Compass className="w-5 h-5 text-emerald-400" />}
+                  movies={natureDocumentaries}
+                  onOpenDetails={(m) => setSelectedMovie(m)}
+                  onSelectMovie={(m) => setSelectedMovie(m)}
+                  onPlayMovie={handlePlayMovie}
+                  onToggleWatchlist={toggleWatchlist}
+                  isInWatchlist={isInWatchlist}
+                  watchProgressMap={watchProgressMap}
+                />
 
-                  {/* Prestige TV Series & Anime */}
-                  <MovieRow
-                    id="row-prestige-tv"
-                    title="Prestige Series & Master Anime"
-                    subtitle="Binge complete seasons with Sinhala & Multi-language subtitles"
-                    icon={<Tv className="w-5 h-5 text-purple-400" />}
-                    movies={prestigeTvAndAnime}
-                    onOpenDetails={(m: MovieItem) => setSelectedMovie(m)}
-                    onPlayMovie={handlePlayMovie}
-                    onToggleWatchlist={toggleWatchlist}
-                    isInWatchlist={isInWatchlist}
-                  />
-
-                  {/* Award-Winning Masterpieces */}
-                  <MovieRow
-                    id="row-award-winning"
-                    title="Critically Acclaimed Masterpieces"
-                    subtitle="Titles rated 8.5+ with highest viewer ratings"
-                    icon={<Clapperboard className="w-5 h-5 text-amber-500" />}
-                    movies={awardWinningDrama}
-                    onOpenDetails={(m: MovieItem) => setSelectedMovie(m)}
-                    onPlayMovie={handlePlayMovie}
-                    onToggleWatchlist={toggleWatchlist}
-                    isInWatchlist={isInWatchlist}
-                  />
-
-                  {/* Adrenaline Action & Thrillers */}
-                  <MovieRow
-                    id="row-action"
-                    title="Adrenaline Action & Edge-of-Seat Thrillers"
-                    subtitle="High-octane soundscapes mixed for home theater immersion"
-                    icon={<Flame className="w-5 h-5 text-orange-500" />}
-                    movies={actionThrillers}
-                    onOpenDetails={(m: MovieItem) => setSelectedMovie(m)}
-                    onPlayMovie={handlePlayMovie}
-                    onToggleWatchlist={toggleWatchlist}
-                    isInWatchlist={isInWatchlist}
-                  />
-
-                  {/* Nature & Wildlife */}
-                  <MovieRow
-                    id="row-nature"
-                    title="Wildlife & Nature Documentaries"
-                    subtitle="Breathtaking 4K HDR captures of Earth's greatest wonders"
-                    icon={<Compass className="w-5 h-5 text-emerald-400" />}
-                    movies={natureDocu}
-                    onOpenDetails={(m: MovieItem) => setSelectedMovie(m)}
-                    onPlayMovie={handlePlayMovie}
-                    onToggleWatchlist={toggleWatchlist}
-                    isInWatchlist={isInWatchlist}
-                  />
-
-                  {/* Cinema Platform Stats Banner */}
-                  <StatsBanner />
-
+                {/* Platform Live Stats */}
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                  <StatsBanner onOpenTechSpecs={() => setIsTechSpecsOpen(true)} />
                 </div>
               </div>
             )}
@@ -555,36 +620,93 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* Mobile Bottom Navigation Bar */}
+      {/* Footer */}
+      <footer className="mt-12 border-t border-slate-800/80 bg-[#07090e] py-8 text-xs text-slate-400">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Logo size="sm" />
+            <span className="text-slate-500">|</span>
+            <span className="text-slate-400 text-[11px]">{BRANDING.tagline}</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 text-[11px]">
+            <button 
+              onClick={() => {
+                window.history.pushState({}, '', '/about');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }} 
+              className="hover:text-white cursor-pointer transition-colors"
+            >
+              About
+            </button>
+            <span>•</span>
+            <button 
+              onClick={() => {
+                window.history.pushState({}, '', '/genres');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }} 
+              className="hover:text-white cursor-pointer transition-colors"
+            >
+              Genres
+            </button>
+            <span>•</span>
+            <button 
+              onClick={() => {
+                window.history.pushState({}, '', '/contact');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }} 
+              className="hover:text-white cursor-pointer transition-colors"
+            >
+              Contact
+            </button>
+            <span>•</span>
+            <button 
+              onClick={() => {
+                window.history.pushState({}, '', '/privacy');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }} 
+              className="hover:text-white cursor-pointer transition-colors"
+            >
+              Privacy
+            </button>
+            <span>•</span>
+            <button 
+              onClick={() => {
+                window.history.pushState({}, '', '/terms');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }} 
+              className="hover:text-white cursor-pointer transition-colors"
+            >
+              Terms
+            </button>
+            <span>•</span>
+            <button onClick={() => setIsTechSpecsOpen(true)} className="hover:text-white cursor-pointer transition-colors">
+              4K Architecture
+            </button>
+            <span>•</span>
+            <span className="text-slate-500">© {new Date().getFullYear()} {BRANDING.name}</span>
+          </div>
+        </div>
+      </footer>
+
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
       <MobileBottomNav
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenSearch={() => setIsSearchModalOpen(true)}
         onOpenWatchlist={() => setActiveTab('watchlist')}
+        onOpenProfile={() => {
+          if (user) {
+            setIsProfileModalOpen(true);
+          } else {
+            openAuthModal();
+          }
+        }}
       />
 
-      {/* Clean Modern Public Footer */}
-      <footer className="border-t border-slate-800/80 bg-[#07090e] py-10 px-4 sm:px-6 lg:px-8 text-slate-400 text-xs mt-12">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <Logo size="sm" />
-            <span className="text-[11px] text-slate-500">
-              © {new Date().getFullYear()} {BRANDING.name} Cinematic Networks. All rights reserved.
-            </span>
-          </div>
-
-          <div className="flex items-center gap-6 text-[11px]">
-            <button onClick={() => setActiveTab('movies')} className="hover:text-white transition-colors">Movies</button>
-            <button onClick={() => setActiveTab('tv')} className="hover:text-white transition-colors">TV Series</button>
-            <button onClick={() => setActiveTab('anime')} className="hover:text-white transition-colors">Anime</button>
-            <button onClick={() => setActiveTab('watchlist')} className="hover:text-white transition-colors">Watchlist</button>
-          </div>
-        </div>
-      </footer>
-
-      {/* ===================================================================== */}
-      {/* MODALS & OVERLAYS */}
-      {/* ===================================================================== */}
+      {/* ============================================================ */}
+      {/* GLOBAL MODALS */}
+      {/* ============================================================ */}
 
       {/* Movie Details Modal */}
       {selectedMovie && (
@@ -625,6 +747,32 @@ export const App: React.FC = () => {
         onSelectMovie={(movie) => {
           setSelectedMovie(movie);
           setIsSearchModalOpen(false);
+        }}
+      />
+
+      {/* User Profile Modal */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        watchlist={fullCatalog.filter(m => watchlist.includes(m.id))}
+        watchProgressMap={watchProgressMap}
+        allMovies={fullCatalog}
+        onPlayMovie={(m, epId) => {
+          setIsProfileModalOpen(false);
+          handlePlayMovie(m, epId);
+        }}
+        onOpenMovieDetail={(m) => {
+          setIsProfileModalOpen(false);
+          setSelectedMovie(m);
+        }}
+        onOpenAdmin={() => {
+          setIsProfileModalOpen(false);
+          window.history.pushState({}, '', '/admin');
+          setCurrentPath('/admin');
+        }}
+        onClearHistory={() => {
+          setWatchProgressMap({});
+          localStorage.removeItem('cinexus_watch_progress');
         }}
       />
 

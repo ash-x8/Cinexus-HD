@@ -14,7 +14,8 @@ import {
   LogOut,
   Bell,
   Star,
-  Check
+  Check,
+  Shield
 } from 'lucide-react';
 import { MovieItem, UserProfile } from '../types';
 import { Logo } from './common/Logo';
@@ -31,6 +32,7 @@ interface NavbarProps {
   onOpenSearchModal: () => void;
   onOpenFilter: () => void;
   onOpenWatchlist: () => void;
+  onOpenProfile: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -42,13 +44,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectMovie,
   onOpenSearchModal,
   onOpenFilter,
-  onOpenWatchlist
+  onOpenWatchlist,
+  onOpenProfile
 }) => {
   const { user, logout, openAuthModal } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [showSearchInput, setShowSearchInput] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
 
   useEffect(() => {
@@ -58,14 +59,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-
-  const searchResults = !searchQuery.trim() 
-    ? [] 
-    : movies.filter(m => 
-        m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        m.genres.some(g => g.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        m.cast?.some(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
-      ).slice(0, 5);
 
   return (
     <header 
@@ -93,7 +86,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="nav-home-btn"
                 onClick={() => setActiveTab('home')}
-                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeTab === 'home' 
                     ? 'text-white bg-red-600 font-bold shadow-md shadow-red-900/30' 
                     : 'text-slate-300 hover:text-white hover:bg-white/5'
@@ -106,7 +99,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="nav-movies-btn"
                 onClick={() => setActiveTab('movies')}
-                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeTab === 'movies' 
                     ? 'text-white bg-red-600 font-bold shadow-md shadow-red-900/30' 
                     : 'text-slate-300 hover:text-white hover:bg-white/5'
@@ -119,7 +112,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="nav-tv-btn"
                 onClick={() => setActiveTab('tv')}
-                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeTab === 'tv' 
                     ? 'text-white bg-red-600 font-bold shadow-md shadow-red-900/30' 
                     : 'text-slate-300 hover:text-white hover:bg-white/5'
@@ -132,7 +125,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="nav-anime-btn"
                 onClick={() => setActiveTab('anime')}
-                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeTab === 'anime' 
                     ? 'text-white bg-red-600 font-bold shadow-md shadow-red-900/30' 
                     : 'text-slate-300 hover:text-white hover:bg-white/5'
@@ -145,7 +138,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="nav-docu-btn"
                 onClick={() => setActiveTab('documentary')}
-                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeTab === 'documentary' 
                     ? 'text-white bg-red-600 font-bold shadow-md shadow-red-900/30' 
                     : 'text-slate-300 hover:text-white hover:bg-white/5'
@@ -158,13 +151,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Right: Search, Filter, Notifications & Account */}
-          <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             
             {/* Quick 4K TMDB Global Search Button */}
             <button
               id="btn-global-search-modal"
               onClick={onOpenSearchModal}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white text-xs font-medium transition-all shadow-sm"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white text-xs font-medium transition-all shadow-sm cursor-pointer"
               title="Search 4K TMDB Catalog (Ctrl + K)"
             >
               <Search className="w-3.5 h-3.5 text-red-400" />
@@ -178,7 +171,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="btn-open-filter-drawer"
               onClick={onOpenFilter}
-              className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white transition-all"
+              className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white transition-all cursor-pointer"
               title="Filter Catalog by Genre, Rating, Year"
             >
               <SlidersHorizontal className="w-4 h-4 text-slate-300" />
@@ -191,7 +184,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setActiveTab('watchlist');
                 onOpenWatchlist();
               }}
-              className={`p-2 rounded-xl border transition-all ${
+              className={`p-2 rounded-xl border transition-all cursor-pointer ${
                 activeTab === 'watchlist' 
                   ? 'bg-red-600 border-red-500 text-white' 
                   : 'bg-slate-900/80 hover:bg-slate-800 border-slate-700/80 text-slate-300 hover:text-white'
@@ -206,7 +199,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="btn-notifications"
                 onClick={() => setNotificationOpen(!notificationOpen)}
-                className="relative p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white transition-all"
+                className="relative p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white transition-all cursor-pointer"
                 title="Notifications"
               >
                 <Bell className="w-4 h-4" />
@@ -237,65 +230,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* User Profile / Auth Action */}
             {user ? (
-              <div className="relative">
-                <button
-                  id="btn-user-avatar-menu"
-                  onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center gap-2 p-1 rounded-xl bg-slate-900/80 border border-slate-700/80 hover:border-slate-600 transition-all"
-                >
-                  <img
-                    src={user.avatarUrl}
-                    alt={user.name}
-                    className="w-7 h-7 rounded-lg object-cover border border-slate-700"
-                  />
-                  <span className="hidden lg:inline text-xs font-semibold text-white max-w-[90px] truncate">
-                    {user.name.split(' ')[0]}
-                  </span>
-                </button>
-
-                {userDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-64 bg-[#0b0f17] border border-slate-700 rounded-2xl p-3 shadow-2xl z-50 space-y-2.5">
-                    <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center gap-3">
-                      <img
-                        src={user.avatarUrl}
-                        alt={user.name}
-                        className="w-9 h-9 rounded-xl object-cover border border-slate-700"
-                      />
-                      <div className="overflow-hidden">
-                        <div className="text-xs font-bold text-white truncate">{user.name}</div>
-                        <div className="text-[10px] text-slate-400 truncate">{user.email}</div>
-                        <div className="mt-1 inline-block px-1.5 py-0.2 rounded bg-red-600/20 border border-red-500/40 text-[9px] text-red-400 font-bold">
-                          VIP MEMBER
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1 text-xs">
-                      <button
-                        onClick={() => {
-                          setActiveTab('watchlist');
-                          setUserDropdownOpen(false);
-                        }}
-                        className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 flex items-center gap-2"
-                      >
-                        <Bookmark className="w-3.5 h-3.5 text-amber-400" />
-                        <span>My Saved Watchlist</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          logout();
-                          setUserDropdownOpen(false);
-                        }}
-                        className="w-full text-left px-3 py-2 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-950/40 flex items-center gap-2"
-                      >
-                        <LogOut className="w-3.5 h-3.5" />
-                        <span>Sign Out</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button
+                id="btn-user-avatar-menu"
+                onClick={onOpenProfile}
+                className="flex items-center gap-2 p-1 rounded-xl bg-slate-900/80 border border-slate-700/80 hover:border-red-500 transition-all cursor-pointer"
+                title="Manage Cinema Profile & Preferences"
+              >
+                <img
+                  src={user.avatarUrl}
+                  alt={user.name}
+                  className="w-7 h-7 rounded-lg object-cover border border-slate-700"
+                />
+                <span className="hidden lg:inline text-xs font-semibold text-white max-w-[90px] truncate">
+                  {user.name.split(' ')[0]}
+                </span>
+              </button>
             ) : (
               <button
                 id="btn-nav-sign-in"
@@ -385,6 +334,30 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Compass className="w-4 h-4 text-emerald-400" />
               <span>Documentaries</span>
             </button>
+
+            {user ? (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenProfile();
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 text-slate-300 hover:bg-slate-800 cursor-pointer"
+              >
+                <User className="w-4 h-4 text-red-400" />
+                <span>My Profile & Settings</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  openAuthModal();
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 text-red-400 hover:bg-slate-800 cursor-pointer"
+              >
+                <User className="w-4 h-4 text-red-400" />
+                <span>Sign In / Register</span>
+              </button>
+            )}
           </div>
         )}
       </div>

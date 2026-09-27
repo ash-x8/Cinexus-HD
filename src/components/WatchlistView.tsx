@@ -14,21 +14,27 @@ import {
 import { MovieItem, WatchProgress } from '../types';
 
 interface WatchlistViewProps {
-  watchlist: MovieItem[];
-  watchProgressMap: Record<string, WatchProgress>;
-  onPlayMovie: (movie: MovieItem) => void;
-  onOpenDetails: (movie: MovieItem) => void;
+  watchlist?: MovieItem[];
+  watchlistIds?: string[];
+  allMovies?: MovieItem[];
+  watchProgressMap?: Record<string, WatchProgress>;
+  onPlayMovie: (movie: MovieItem, episodeId?: string) => void;
+  onOpenDetails?: (movie: MovieItem) => void;
+  onSelectMovie?: (movie: MovieItem) => void;
   onRemoveFromWatchlist: (movieId: string) => void;
-  onBrowseCatalog: () => void;
+  onBrowseCatalog?: () => void;
 }
 
 export const WatchlistView: React.FC<WatchlistViewProps> = ({
   watchlist,
-  watchProgressMap,
+  watchlistIds,
+  allMovies = [],
+  watchProgressMap = {},
   onPlayMovie,
   onOpenDetails,
+  onSelectMovie,
   onRemoveFromWatchlist,
-  onBrowseCatalog
+  onBrowseCatalog = () => {}
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'continue' | 'favorites'>('all');
   const [selectedFolder, setSelectedFolder] = useState<string>('All');
@@ -36,12 +42,22 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
   const [newFolderName, setNewFolderName] = useState('');
   const [showFolderInput, setShowFolderInput] = useState(false);
 
+  const effectiveWatchlist = React.useMemo(() => {
+    if (watchlist && watchlist.length > 0) return watchlist;
+    if (watchlistIds && allMovies.length > 0) {
+      return allMovies.filter(m => watchlistIds.includes(m.id));
+    }
+    return watchlist || [];
+  }, [watchlist, watchlistIds, allMovies]);
+
+  const handleDetails = onOpenDetails || onSelectMovie || onPlayMovie;
+
   // In-progress movies
-  const continueWatchingList = watchlist.filter(m => watchProgressMap[m.id] && watchProgressMap[m.id].percentage > 0 && watchProgressMap[m.id].percentage < 95);
+  const continueWatchingList = effectiveWatchlist.filter(m => watchProgressMap[m.id] && watchProgressMap[m.id].percentage > 0 && watchProgressMap[m.id].percentage < 95);
 
   const displayedList = activeTab === 'continue' 
     ? continueWatchingList 
-    : watchlist;
+    : effectiveWatchlist;
 
   const handleAddFolder = (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,7 +81,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
             My Watchlist & Collections
           </h1>
           <p className="text-xs sm:text-sm text-slate-400">
-            {watchlist.length} titles saved • Stream instantly in 4K HDR
+            {effectiveWatchlist.length} titles saved • Stream instantly in 4K HDR
           </p>
         </div>
 
@@ -73,11 +89,11 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
         <div className="flex items-center gap-1.5 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 self-start sm:self-auto text-xs font-semibold">
           <button
             onClick={() => setActiveTab('all')}
-            className={`px-3.5 py-1.5 rounded-xl transition-all ${
+            className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
               activeTab === 'all' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
-            All Saved ({watchlist.length})
+            All Saved ({effectiveWatchlist.length})
           </button>
           <button
             onClick={() => setActiveTab('continue')}
@@ -172,7 +188,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
               >
                 {/* Poster */}
                 <div 
-                  onClick={() => onOpenDetails(movie)}
+                  onClick={() => handleDetails(movie)}
                   className="aspect-[2/3] w-full relative overflow-hidden bg-slate-950 cursor-pointer"
                 >
                   <img
@@ -207,7 +223,7 @@ export const WatchlistView: React.FC<WatchlistViewProps> = ({
                 <div className="p-3 flex-1 flex flex-col justify-between space-y-2">
                   <div>
                     <h4 
-                      onClick={() => onOpenDetails(movie)}
+                      onClick={() => handleDetails(movie)}
                       className="text-xs sm:text-sm font-bold text-white group-hover:text-red-400 transition-colors line-clamp-1 cursor-pointer"
                     >
                       {movie.title}

@@ -5,11 +5,20 @@ import { Shield, Lock, Mail, ArrowRight, AlertCircle, CheckCircle2, Eye, EyeOff 
 import { BRANDING } from '../../config/branding';
 
 interface AdminPortalProps {
-  onSuccess: () => void;
-  onExit: () => void;
+  onSuccess?: () => void;
+  onExit?: () => void;
+  onAccessGranted?: () => void;
+  onBackToSite?: () => void;
 }
 
-export const AdminPortal: React.FC<AdminPortalProps> = ({ onSuccess, onExit }) => {
+export const AdminPortal: React.FC<AdminPortalProps> = ({ 
+  onSuccess, 
+  onExit, 
+  onAccessGranted, 
+  onBackToSite 
+}) => {
+  const handleSuccess = onSuccess || onAccessGranted || (() => {});
+  const handleExit = onExit || onBackToSite || (() => {});
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,7 +39,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSuccess, onExit }) =
     try {
       const user = await login(email.trim(), password.trim());
       if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
-        onSuccess();
+        handleSuccess();
       } else {
         setError('Access denied. This account lacks Studio Administrator privileges.');
       }
@@ -87,7 +96,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSuccess, onExit }) =
             </label>
             <input
               type="email"
-              placeholder="kushanashvika216@gmail.com"
+              placeholder="admin@domain.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 rounded-2xl bg-slate-900/90 border border-slate-800 focus:border-red-500 text-white text-sm placeholder:text-slate-600 focus:outline-none transition-colors"
@@ -137,8 +146,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSuccess, onExit }) =
 
             <button
               type="button"
-              onClick={onExit}
-              className="w-full py-2.5 rounded-2xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 text-xs font-semibold transition-colors"
+              onClick={handleExit}
+              className="w-full py-2.5 rounded-2xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
             >
               Return to Public Cinema
             </button>

@@ -8,6 +8,7 @@ export const BRANDING = {
   name: 'CINEXUS',
   tagline: 'STREAM. WATCH. EXPERIENCE.',
   subtitle: 'Ultra 4K Cinema Discovery & Streaming',
+  description: 'Ultra 4K Cinema Discovery & Streaming Platform with master quality feeds.',
   shortName: 'CINEXUS',
   legalNotice: 'CINEXUS Entertainment. All streams and embeds require verified distribution authorization.',
   

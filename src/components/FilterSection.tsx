@@ -6,18 +6,25 @@ import { GENRE_LIST } from '../data/moviesData';
 interface FilterSectionProps {
   filters: FilterOptions;
   setFilters: React.Dispatch<React.SetStateAction<FilterOptions>>;
-  resetFilters: () => void;
-  isOpen: boolean;
-  totalFilteredCount: number;
+  resetFilters?: () => void;
+  onReset?: () => void;
+  isOpen?: boolean;
+  totalFilteredCount?: number;
+  resultCount?: number;
 }
 
 export const FilterSection: React.FC<FilterSectionProps> = ({
   filters,
   setFilters,
   resetFilters,
-  isOpen,
-  totalFilteredCount
+  onReset,
+  isOpen = true,
+  totalFilteredCount,
+  resultCount
 }) => {
+  const handleReset = resetFilters || onReset || (() => {});
+  const displayCount = totalFilteredCount !== undefined ? totalFilteredCount : (resultCount !== undefined ? resultCount : 0);
+
   if (!isOpen) return null;
 
   return (
@@ -32,14 +39,14 @@ export const FilterSection: React.FC<FilterSectionProps> = ({
               Smart Cinema Filter & Sort
             </h3>
             <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
-              {totalFilteredCount} matching
+              {displayCount} matching
             </span>
           </div>
 
           <button
             id="reset-filters-btn"
-            onClick={resetFilters}
-            className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-400 font-medium transition-colors"
+            onClick={handleReset}
+            className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-400 font-medium transition-colors cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
             <span>Reset All</span>

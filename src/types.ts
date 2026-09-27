@@ -25,10 +25,13 @@ export interface CrewMember {
 export interface VideoSource {
   id: string;
   title: string;
+  name?: string;
   url: string;
-  type: 'hls' | 'mp4' | 'cdn' | 'youtube';
-  quality: '4K' | '1080p' | '720p' | '480p' | 'Auto';
+  type: 'hls' | 'mp4' | 'iframe' | 'embed' | 'cdn' | 'youtube';
+  quality: '4K' | '1080p' | '720p' | '480p' | 'Auto' | string;
+  priority?: number;
   isDefault?: boolean;
+  enabled?: boolean;
 }
 
 export interface ServerEmbeds {
@@ -121,6 +124,8 @@ export interface MovieItem {
   episodeRuntime?: number[];
   numberOfSeasons?: number;
   numberOfEpisodes?: number;
+  slug?: string;
+  isPublished?: boolean;
   genres: string[];
   genreIds?: number[];
   rating: number; // 0 to 10
@@ -261,30 +266,42 @@ export interface HomepageSectionConfig {
   id: string;
   title: string;
   subtitle?: string;
-  type: 'trending' | 'popular_movies' | 'popular_tv' | 'top_rated' | 'new_releases' | 'genre' | 'regional' | 'custom' | 'continue_watching';
+  type: 'trending' | 'popular_movies' | 'popular_tv' | 'top_rated' | 'new_releases' | 'genre' | 'regional' | 'custom' | 'continue_watching' | 'curated_row' | 'genre_row';
   genreId?: number;
   genreName?: string;
   regionCode?: string;
   enabled: boolean;
   order: number;
-  itemLimit: number;
+  itemLimit?: number;
+  limit?: number;
+  contentSource?: string;
+  badge?: string;
+  filterGenre?: string;
+  filterQuality?: string;
   items?: MovieItem[];
 }
 
 export interface AdminStats {
   totalMovies: number;
-  totalTVSeries: number;
+  totalSeries?: number;
+  totalTVSeries?: number;
   totalEpisodes: number;
   totalUsers: number;
-  totalViews: number;
-  totalWatchHours: number;
-  activeStreamsNow: number;
-  systemStatus: 'Optimal' | 'Degraded' | 'Maintenance';
+  totalViews?: number;
+  totalWatchHours?: number;
+  activeStreams?: number;
+  activeStreamsNow?: number;
+  systemStatus?: 'Optimal' | 'Degraded' | 'Maintenance';
   storageUsedGB: number;
-  storageMaxGB: number;
-  tmdbApiStatus: 'Connected' | 'Error';
-  recentRegistrations: { date: string; count: number }[];
-  viewsOverTime: { date: string; views: number }[];
+  storageMaxGB?: number;
+  bandwidthTodayGB?: number;
+  viewsToday?: number;
+  publishedTitles?: number;
+  draftTitles?: number;
+  totalReviews?: number;
+  tmdbApiStatus?: 'Connected' | 'Error';
+  recentRegistrations?: { date: string; count: number }[];
+  viewsOverTime?: { date: string; views: number }[];
 }
 
 export interface VideoEmbed {
@@ -325,7 +342,7 @@ export interface SiteSettings {
   maintenanceMode: boolean;
   defaultQuality: string;
   allowUserRegistrations: boolean;
-  providers: VideoProvider[];
+  providers?: VideoProvider[];
 }
 
 export interface AuditLog {

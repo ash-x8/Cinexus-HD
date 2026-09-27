@@ -1,0 +1,162 @@
+{
+  "entities": {
+    "Movie": {
+      "title": "Movie",
+      "description": "A feature film with video streaming sources, subtitles, and metadata",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "originalTitle": { "type": "string" },
+        "slug": { "type": "string" },
+        "tmdbId": { "type": "number" },
+        "mediaType": { "type": "string", "enum": ["movie"] },
+        "posterPath": { "type": "string" },
+        "backdropPath": { "type": "string" },
+        "overview": { "type": "string" },
+        "releaseDate": { "type": "string" },
+        "releaseYear": { "type": "number" },
+        "runtime": { "type": "number" },
+        "genres": { "type": "array" },
+        "rating": { "type": "number" },
+        "quality": { "type": "string", "enum": ["4K", "1080p", "720p", "Auto"] },
+        "director": { "type": "string" },
+        "cast": { "type": "array" },
+        "trailerUrl": { "type": "string" },
+        "sources": { "type": "array" },
+        "subtitles": { "type": "array" },
+        "isFeatured": { "type": "boolean" },
+        "isTrending": { "type": "boolean" },
+        "isPublished": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "mediaType", "isPublished"]
+    },
+    "Series": {
+      "title": "Series",
+      "description": "A television or anime series with seasons, episodes, and streaming sources",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "originalTitle": { "type": "string" },
+        "slug": { "type": "string" },
+        "tmdbId": { "type": "number" },
+        "mediaType": { "type": "string", "enum": ["tv", "anime"] },
+        "posterPath": { "type": "string" },
+        "backdropPath": { "type": "string" },
+        "overview": { "type": "string" },
+        "releaseDate": { "type": "string" },
+        "releaseYear": { "type": "number" },
+        "genres": { "type": "array" },
+        "rating": { "type": "number" },
+        "quality": { "type": "string" },
+        "seasonsCount": { "type": "number" },
+        "episodesCount": { "type": "number" },
+        "cast": { "type": "array" },
+        "trailerUrl": { "type": "string" },
+        "isFeatured": { "type": "boolean" },
+        "isTrending": { "type": "boolean" },
+        "isPublished": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["title", "mediaType", "isPublished"]
+    },
+    "Episode": {
+      "title": "Episode",
+      "description": "An episode of a TV series with streaming sources and subtitles",
+      "type": "object",
+      "properties": {
+        "seriesId": { "type": "string" },
+        "seasonNumber": { "type": "number" },
+        "episodeNumber": { "type": "number" },
+        "title": { "type": "string" },
+        "overview": { "type": "string" },
+        "stillPath": { "type": "string" },
+        "runtime": { "type": "string" },
+        "sources": { "type": "array" },
+        "subtitles": { "type": "array" },
+        "isPublished": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["seriesId", "seasonNumber", "episodeNumber", "title"]
+    },
+    "HomepageSection": {
+      "title": "HomepageSection",
+      "description": "Dynamic homepage curated rail section",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "type": { "type": "string" },
+        "order": { "type": "number" },
+        "enabled": { "type": "boolean" },
+        "itemLimit": { "type": "number" },
+        "filter": { "type": "string" }
+      },
+      "required": ["title", "type", "order", "enabled"]
+    },
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Global cinema platform settings and preferences",
+      "type": "object",
+      "properties": {
+        "siteName": { "type": "string" },
+        "siteTagline": { "type": "string" },
+        "siteDescription": { "type": "string" },
+        "primaryAccent": { "type": "string" },
+        "seoTitle": { "type": "string" },
+        "seoDescription": { "type": "string" },
+        "maintenanceMode": { "type": "boolean" },
+        "allowRegistrations": { "type": "boolean" }
+      }
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Administrative actions audit log",
+      "type": "object",
+      "properties": {
+        "action": { "type": "string" },
+        "adminEmail": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["action", "adminEmail", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/movies/{movieId}": {
+      "schema": "Movie",
+      "description": "Public movies collection"
+    },
+    "/series/{seriesId}": {
+      "schema": "Series",
+      "description": "Public TV and Anime series collection"
+    },
+    "/episodes/{episodeId}": {
+      "schema": "Episode",
+      "description": "Individual TV and Anime episodes with sources"
+    },
+    "/homepageSections/{sectionId}": {
+      "schema": "HomepageSection",
+      "description": "Dynamic CMS homepage rail layout configuration"
+    },
+    "/settings/{settingId}": {
+      "schema": "SiteSettings",
+      "description": "Global website settings document"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Protected administrative audit log entries"
+    },
+    "/users/{userId}/watchlist/{movieId}": {
+      "schema": "Movie",
+      "description": "User personal saved watchlist items"
+    },
+    "/users/{userId}/history/{contentId}": {
+      "schema": "Movie",
+      "description": "User persistent watch progress history"
+    }
+  }
+}

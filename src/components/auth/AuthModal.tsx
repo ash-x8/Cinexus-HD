@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../common/Logo';
-import { X, Mail, Lock, User, Shield, CheckCircle, AlertCircle, Sparkles } from 'lucide-react';
+import { X, Mail, Lock, User, AlertCircle, Sparkles } from 'lucide-react';
 
 export const AuthModal: React.FC = () => {
   const { authModalOpen, authModalMode, closeAuthModal, openAuthModal, login, register } = useAuth();
@@ -15,6 +15,16 @@ export const AuthModal: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email.trim() || !password.trim()) {
+      setError('Please provide your cinema email and password.');
+      return;
+    }
+
+    if (authModalMode === 'register' && !name.trim()) {
+      setError('Please enter your preferred cinema display name.');
+      return;
+    }
+
     setError(null);
     setLoading(true);
 
@@ -25,182 +35,135 @@ export const AuthModal: React.FC = () => {
         await register(email, password, name);
       }
     } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      setError(err.message || 'Authentication error. Please check your credentials.');
     } finally {
       setLoading(false);
     }
   };
 
-  const fillQuickAdmin = () => {
-    setEmail('kushanashvika216@gmail.com');
-    setPassword('cinexus@07');
-    setError(null);
-  };
-
-  const fillQuickUser = () => {
-    setEmail('viewer@cinexus.app');
-    setPassword('cinexus123');
-    setError(null);
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-md bg-zinc-950 border border-zinc-800/80 rounded-2xl shadow-2xl overflow-hidden p-6 sm:p-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+      <div className="relative w-full max-w-md bg-[#0b0f17] border border-slate-800 rounded-3xl shadow-2xl overflow-hidden p-6 sm:p-8">
         
         {/* Ambient Top Glow */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 bg-red-600/15 blur-3xl pointer-events-none" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 bg-red-600/10 blur-3xl pointer-events-none" />
 
         {/* Close Button */}
         <button
           id="btn-close-auth-modal"
           onClick={closeAuthModal}
-          className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white rounded-full bg-zinc-900/60 hover:bg-zinc-800 transition-colors"
+          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full bg-slate-900/80 hover:bg-slate-800 transition-colors cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Header with Brand Logo */}
         <div className="flex flex-col items-center text-center mb-6">
-          <Logo size="lg" showSubtitle className="mb-2" />
-          <h2 className="text-xl font-bold text-white tracking-tight mt-2">
-            {authModalMode === 'login' ? 'Welcome Back to CINEXUS' : 'Create Your Cinema Account'}
+          <Logo size="md" showSubtitle={false} className="mb-2" />
+          <h2 className="text-xl font-bold font-display text-white tracking-wide mt-2">
+            {authModalMode === 'login' ? 'Sign In to CINEXUS' : 'Join CINEXUS'}
           </h2>
-          <p className="text-xs text-zinc-400 mt-1 max-w-xs">
+          <p className="text-xs text-slate-400 mt-1 max-w-xs">
             {authModalMode === 'login' 
-              ? 'Sign in to access your synchronized 4K watchlist, continue watching progress, and premium features.' 
-              : 'Join CINEXUS for personalized movie recommendations, watch parties, and 4K HDR streams.'}
+              ? 'Access your synchronized 4K watchlist, continue watching history, and personalized stream feeds.' 
+              : 'Create your account to unlock 4K HDR playback, custom audio tracks, and private watchlists.'}
           </p>
         </div>
 
-        {/* Quick Demo Fill Pills for Testing */}
-        <div className="mb-5 p-3 rounded-xl bg-zinc-900/80 border border-zinc-800">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300 mb-2">
-            <Sparkles className="w-3.5 h-3.5 text-red-500" />
-            <span>Instant Demo Logins:</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              id="btn-quick-fill-admin"
-              onClick={fillQuickAdmin}
-              className="flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-red-950/40 hover:bg-red-900/50 border border-red-800/40 text-[11px] font-medium text-red-300 transition-colors"
-            >
-              <Shield className="w-3 h-3 text-red-400" />
-              <span>Super Admin</span>
-            </button>
-            <button
-              type="button"
-              id="btn-quick-fill-user"
-              onClick={fillQuickUser}
-              className="flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-zinc-800/60 hover:bg-zinc-700/60 border border-zinc-700/50 text-[11px] font-medium text-zinc-300 transition-colors"
-            >
-              <User className="w-3 h-3 text-zinc-400" />
-              <span>Standard User</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Error Notification */}
+        {/* Error Alert */}
         {error && (
-          <div className="mb-4 p-3 rounded-xl bg-red-950/50 border border-red-800/50 flex items-center gap-2.5 text-xs text-red-200">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+          <div className="mb-4 p-3 rounded-2xl bg-red-950/60 border border-red-600/40 text-red-300 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
             <span>{error}</span>
           </div>
         )}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Authentication Form */}
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           {authModalMode === 'register' && (
-            <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1.5">Full Name</label>
-              <div className="relative">
-                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                <input
-                  id="input-auth-name"
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Kushan Ashvika"
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all"
-                />
-              </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-slate-400" />
+                <span>Display Name</span>
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Alex Morgan"
+                className="w-full bg-[#07090e] border border-slate-800 focus:border-red-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 outline-none transition-all"
+                required
+              />
             </div>
           )}
 
-          <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1.5">Email Address</label>
-            <div className="relative">
-              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <input
-                id="input-auth-email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all"
-              />
-            </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <Mail className="w-3.5 h-3.5 text-slate-400" />
+              <span>Email Address</span>
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="user@cinexus.app"
+              className="w-full bg-[#07090e] border border-slate-800 focus:border-red-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 outline-none transition-all"
+              required
+            />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1.5">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <input
-                id="input-auth-password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all"
-              />
-            </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5 text-slate-400" />
+              <span>Security Password</span>
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••••••"
+              className="w-full bg-[#07090e] border border-slate-800 focus:border-red-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 outline-none transition-all"
+              required
+            />
           </div>
 
-          <button
-            type="submit"
-            id="btn-auth-submit"
-            disabled={loading}
-            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-semibold text-sm shadow-lg shadow-red-950/40 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer mt-2"
-          >
-            {loading ? (
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <>
-                <CheckCircle className="w-4 h-4" />
-                <span>{authModalMode === 'login' ? 'Sign In to CINEXUS' : 'Create Account'}</span>
-              </>
-            )}
-          </button>
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-lg shadow-red-950/60 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <span>{authModalMode === 'login' ? 'Authenticate Account' : 'Create Free Account'}</span>
+              )}
+            </button>
+          </div>
         </form>
 
         {/* Toggle Mode */}
-        <div className="mt-6 text-center text-xs text-zinc-400">
+        <div className="mt-5 pt-4 border-t border-slate-800/80 text-center">
           {authModalMode === 'login' ? (
-            <p>
-              Don't have an account?{' '}
+            <p className="text-xs text-slate-400">
+              New to CINEXUS?{' '}
               <button
                 type="button"
-                id="btn-switch-to-register"
                 onClick={() => openAuthModal('register')}
-                className="text-red-400 hover:text-red-300 font-semibold underline underline-offset-2 transition-colors ml-1"
+                className="text-red-400 hover:text-red-300 font-bold ml-1 cursor-pointer transition-colors"
               >
-                Sign up free
+                Register Now
               </button>
             </p>
           ) : (
-            <p>
+            <p className="text-xs text-slate-400">
               Already have an account?{' '}
               <button
                 type="button"
-                id="btn-switch-to-login"
                 onClick={() => openAuthModal('login')}
-                className="text-red-400 hover:text-red-300 font-semibold underline underline-offset-2 transition-colors ml-1"
+                className="text-red-400 hover:text-red-300 font-bold ml-1 cursor-pointer transition-colors"
               >
-                Sign in
+                Sign In
               </button>
             </p>
           )}

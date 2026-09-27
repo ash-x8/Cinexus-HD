@@ -4,15 +4,16 @@ import { MovieItem, WatchProgress } from '../types';
 import { MovieCard } from './MovieCard';
 
 interface MovieRowProps {
-  id: string;
+  id?: string;
   title: string;
   subtitle?: string;
-  icon?: React.ReactNode;
+  icon?: React.ReactNode | React.ElementType;
   badge?: string;
   movies: MovieItem[];
   isTop10?: boolean;
   onPlayMovie: (movie: MovieItem) => void;
-  onOpenDetails: (movie: MovieItem) => void;
+  onOpenDetails?: (movie: MovieItem) => void;
+  onSelectMovie?: (movie: MovieItem) => void;
   isInWatchlist: (movieId: string) => boolean;
   onToggleWatchlist: (movie: MovieItem) => void;
   watchProgressMap?: Record<string, WatchProgress>;
@@ -28,11 +29,30 @@ export const MovieRow: React.FC<MovieRowProps> = ({
   isTop10 = false,
   onPlayMovie,
   onOpenDetails,
+  onSelectMovie,
   isInWatchlist,
   onToggleWatchlist,
   watchProgressMap = {}
 }) => {
   const rowRef = useRef<HTMLDivElement>(null);
+  const rowId = id || title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const handleDetails = onOpenDetails || onSelectMovie || onPlayMovie;
+
+  const renderIcon = () => {
+    if (!icon) return null;
+    if (React.isValidElement(icon)) {
+      return <div className="text-red-500 shrink-0">{icon}</div>;
+    }
+    if (typeof icon === 'function' || (typeof icon === 'object' && icon !== null)) {
+      const IconComp = icon as React.ElementType;
+      return (
+        <div className="text-red-500 shrink-0">
+          <IconComp className="w-5 h-5 sm:w-6 sm:h-6" />
+        </div>
+      );
+    }
+    return <div className="text-red-500 shrink-0">{icon}</div>;
+  };
 
   const scroll = (direction: 'left' | 'right') => {
     if (rowRef.current) {
@@ -48,13 +68,13 @@ export const MovieRow: React.FC<MovieRowProps> = ({
   if (movies.length === 0) return null;
 
   return (
-    <section id={`row-${id}`} className="py-4 sm:py-6 relative">
+    <section id={`row-${rowId}`} className="py-4 sm:py-6 relative">
       
       {/* Row Header */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-3 sm:mb-4 flex items-end justify-between">
         <div>
           <div className="flex items-center gap-2.5">
-            {icon && <div className="text-red-500">{icon}</div>}
+            {renderIcon()}
             <h2 className="text-lg sm:text-xl md:text-2xl font-bold font-display text-white tracking-wide">
               {title}
             </h2>
@@ -72,17 +92,17 @@ export const MovieRow: React.FC<MovieRowProps> = ({
         {/* Scroll Arrows */}
         <div className="hidden sm:flex items-center gap-2">
           <button
-            id={`row-prev-btn-${id}`}
+            id={`row-prev-btn-${rowId}`}
             onClick={() => scroll('left')}
-            className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-700 transition-all shadow-sm"
+            className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-700 transition-all shadow-sm cursor-pointer"
             aria-label="Scroll left"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
-            id={`row-next-btn-${id}`}
+            id={`row-next-btn-${rowId}`}
             onClick={() => scroll('right')}
-            className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-700 transition-all shadow-sm"
+            className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-700 transition-all shadow-sm cursor-pointer"
             aria-label="Scroll right"
           >
             <ChevronRight className="w-4 h-4" />
@@ -103,7 +123,7 @@ export const MovieRow: React.FC<MovieRowProps> = ({
               movie={movie}
               rank={isTop10 ? index + 1 : undefined}
               onPlayMovie={onPlayMovie}
-              onOpenDetails={onOpenDetails}
+              onOpenDetails={handleDetails}
               isInWatchlist={isInWatchlist}
               onToggleWatchlist={onToggleWatchlist}
               watchProgress={watchProgressMap[movie.id]}

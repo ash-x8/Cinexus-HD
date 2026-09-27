@@ -7,13 +7,15 @@ interface MobileBottomNavProps {
   setActiveTab: (tab: 'home' | 'movies' | 'tv' | 'anime' | 'documentary' | 'watchlist') => void;
   onOpenSearch: () => void;
   onOpenWatchlist: () => void;
+  onOpenProfile: () => void;
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   activeTab,
   setActiveTab,
   onOpenSearch,
-  onOpenWatchlist
+  onOpenWatchlist,
+  onOpenProfile
 }) => {
   const { user, openAuthModal } = useAuth();
 
@@ -22,7 +24,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       {/* Home */}
       <button
         onClick={() => setActiveTab('home')}
-        className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
+        className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
           activeTab === 'home' ? 'text-red-500 font-bold' : 'text-slate-400 hover:text-slate-200'
         }`}
       >
@@ -33,7 +35,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       {/* Movies */}
       <button
         onClick={() => setActiveTab('movies')}
-        className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
+        className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
           activeTab === 'movies' ? 'text-red-500 font-bold' : 'text-slate-400 hover:text-slate-200'
         }`}
       >
@@ -44,7 +46,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       {/* TV */}
       <button
         onClick={() => setActiveTab('tv')}
-        className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
+        className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
           activeTab === 'tv' ? 'text-red-500 font-bold' : 'text-slate-400 hover:text-slate-200'
         }`}
       >
@@ -55,7 +57,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       {/* Global Search */}
       <button
         onClick={onOpenSearch}
-        className="flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-slate-400 hover:text-slate-200 transition-all"
+        className="flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-slate-400 hover:text-slate-200 transition-all cursor-pointer"
       >
         <Search className="w-5 h-5" />
         <span className="text-[10px] mt-0.5">Search</span>
@@ -67,7 +69,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           setActiveTab('watchlist');
           onOpenWatchlist();
         }}
-        className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
+        className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
           activeTab === 'watchlist' ? 'text-red-500 font-bold' : 'text-slate-400 hover:text-slate-200'
         }`}
       >
@@ -78,9 +80,13 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       {/* Account / Profile */}
       <button
         onClick={() => {
-          if (!user) openAuthModal();
+          if (user) {
+            onOpenProfile();
+          } else {
+            openAuthModal();
+          }
         }}
-        className="flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-slate-400 hover:text-slate-200 transition-all"
+        className="flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-slate-400 hover:text-slate-200 transition-all cursor-pointer"
       >
         {user ? (
           <img

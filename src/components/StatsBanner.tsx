@@ -1,10 +1,19 @@
 import React from 'react';
 import { Sparkles, Tv, Radio, ShieldCheck, Zap } from 'lucide-react';
 
-export const StatsBanner: React.FC = () => {
+interface StatsBannerProps {
+  onOpenTechSpecs?: () => void;
+}
+
+export const StatsBanner: React.FC<StatsBannerProps> = ({ onOpenTechSpecs }) => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div className="bg-gradient-to-r from-slate-900/90 via-[#111722] to-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-xl grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div 
+        onClick={onOpenTechSpecs}
+        className={`bg-gradient-to-r from-slate-900/90 via-[#111722] to-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-xl grid grid-cols-2 md:grid-cols-4 gap-4 transition-all ${
+          onOpenTechSpecs ? 'cursor-pointer hover:border-red-500/50 hover:shadow-2xl hover:shadow-red-950/20' : ''
+        }`}
+      >
         
         <div className="flex items-center gap-3">
           <div className="p-3 rounded-2xl bg-red-600/10 border border-red-500/30 text-red-500 shrink-0">
