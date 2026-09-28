@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AdminLogin } from '../components/admin/AdminLogin';
 import { AdminLayout, AdminTab } from '../components/admin/AdminLayout';
@@ -10,12 +11,38 @@ import { AdminMedia } from '../components/admin/AdminMedia';
 import { AdminHomepage } from '../components/admin/AdminHomepage';
 import { AdminSettings } from '../components/admin/AdminSettings';
 import { AdminAudit } from '../components/admin/AdminAudit';
-import { ShieldAlert, LogOut, ArrowLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ShieldAlert, ArrowLeft } from 'lucide-react';
 
 export const AdminPage: React.FC = () => {
   const { user, isAdmin, isLoading, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Match URL path to active tab
+  const getTabFromPath = (): AdminTab => {
+    const subpath = location.pathname.replace(/^\/admin\/?/, '').split('/')[0];
+    if (subpath === 'tv' || subpath === 'series') return 'series';
+    if (subpath === 'movies') return 'movies';
+    if (subpath === 'sources') return 'sources';
+    if (subpath === 'media') return 'media';
+    if (subpath === 'homepage') return 'homepage';
+    if (subpath === 'settings') return 'settings';
+    if (subpath === 'security') return 'security';
+    if (subpath === 'audit') return 'audit';
+    if (subpath === 'users') return 'users';
+    if (subpath === 'reviews') return 'reviews';
+    if (subpath === 'analytics') return 'analytics';
+    if (subpath === 'collections') return 'collections';
+    if (subpath === 'seo') return 'seo';
+    return 'dashboard';
+  };
+
+  const activeTab = getTabFromPath();
+
+  const handleTabChange = (tab: AdminTab) => {
+    const route = tab === 'series' ? 'tv' : tab === 'dashboard' ? '' : tab;
+    navigate(`/admin${route ? `/${route}` : ''}`);
+  };
 
   if (isLoading) {
     return (
@@ -55,7 +82,7 @@ export const AdminPage: React.FC = () => {
             </Link>
             <button
               onClick={() => logout()}
-              className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-xs font-semibold text-white uppercase transition-colors"
+              className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-xs font-semibold text-white uppercase transition-colors cursor-pointer"
             >
               Sign Out
             </button>
@@ -67,8 +94,8 @@ export const AdminPage: React.FC = () => {
 
   // Authenticated + Authorized Administrator Workspace
   return (
-    <AdminLayout activeTab={activeTab} onTabChange={setActiveTab}>
-      {activeTab === 'dashboard' && <AdminDashboard onNavigate={setActiveTab} />}
+    <AdminLayout activeTab={activeTab} onTabChange={handleTabChange}>
+      {activeTab === 'dashboard' && <AdminDashboard onNavigate={handleTabChange} />}
       {activeTab === 'movies' && <AdminMovies />}
       {activeTab === 'series' && <AdminSeries />}
       {activeTab === 'sources' && <AdminSources />}
@@ -77,7 +104,7 @@ export const AdminPage: React.FC = () => {
       {activeTab === 'collections' && <AdminMovies />}
       {activeTab === 'users' && <AdminAudit />}
       {activeTab === 'reviews' && <AdminAudit />}
-      {activeTab === 'analytics' && <AdminDashboard onNavigate={setActiveTab} />}
+      {activeTab === 'analytics' && <AdminDashboard onNavigate={handleTabChange} />}
       {activeTab === 'seo' && <AdminSettings />}
       {activeTab === 'settings' && <AdminSettings />}
       {activeTab === 'security' && <AdminSettings />}

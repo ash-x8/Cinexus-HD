@@ -7,12 +7,14 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   signOut,
-  updateProfile
+  updateProfile,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { UserProfile, UserRole } from '../types';
 import { checkIsAdmin, COLLECTIONS } from '../services/firestore';
+import { uploadUserProfilePhoto } from '../services/storage';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -20,17 +22,20 @@ interface AuthContextType {
   isAdmin: boolean;
   isLoading: boolean;
   authModalOpen: boolean;
-  authModalMode: 'login' | 'register';
-  openAuthModal: (mode?: 'login' | 'register') => void;
+  authModalMode: 'login' | 'register' | 'forgot_password';
+  openAuthModal: (mode?: 'login' | 'register' | 'forgot_password') => void;
   closeAuthModal: () => void;
   login: (email: string, pass: string) => Promise<UserProfile>;
   register: (email: string, pass: string, name?: string) => Promise<UserProfile>;
   loginWithEmail: (email: string, pass: string) => Promise<UserProfile>;
   signupWithEmail: (email: string, pass: string, name: string) => Promise<UserProfile>;
   loginWithGoogle: () => Promise<UserProfile>;
+  sendPasswordReset: (email: string) => Promise<void>;
   adminLogin: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  uploadAvatar: (file: File) => Promise<string>;
+  removeAvatar: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,9 +46,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'register' | 'forgot_password'>('login');
 
-  const openAuthModal = (mode: 'login' | 'register' = 'login') => {
+  const openAuthModal = (mode: 'login' | 'register' | 'forgot_password' = 'login') => {
     setAuthModalMode(mode);
     setAuthModalOpen(true);
   };
@@ -140,6 +145,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const loginWithGoogle = async (): Promise<UserProfile> => {
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({
+      client_id: '1034803141860-6216717n36tf103ucti42jjicpaftkkk.apps.googleusercontent.com',
+      prompt: 'select_account'
+    });
     const cred = await signInWithPopup(auth, provider);
     await syncUserData(cred.user);
     return {
@@ -147,8 +156,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       email: cred.user.email || '',
       name: cred.user.displayName || 'Cinema Fan',
       role: 'USER',
+      avatarUrl: cred.user.photoURL || undefined,
       createdAt: new Date().toISOString()
     };
+  };
+
+  const sendPasswordReset = async (email: string): Promise<void> => {
+    await sendPasswordResetEmail(auth, email.trim());
   };
 
   // Dedicated Admin Login at /admin
@@ -218,6 +232,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(prev => prev ? { ...prev, ...updates } : null);
   };
 
+  const uploadAvatar = async (file: File): Promise<string> => {
+    if (!firebaseUser && !user) throw new Error('You must be logged in to upload an avatar.');
+    const uid = firebaseUser?.uid || user?.id;
+    if (!uid) throw new Error('User identifier not found.');
+    const url = await uploadUserProfilePhoto(uid, file);
+    await updateUserProfile({ avatarUrl: url });
+    return url;
+  };
+
+  const removeAvatar = async (): Promise<void> => {
+    if (!firebaseUser && !user) return;
+    await updateUserProfile({ avatarUrl: '' });
+  };
+
   const logout = async () => {
     await signOut(auth);
     setFirebaseUser(null);
@@ -241,9 +269,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         loginWithEmail,
         signupWithEmail,
         loginWithGoogle,
+        sendPasswordReset,
         adminLogin,
         logout,
-        updateProfile: updateUserProfile
+        updateProfile: updateUserProfile,
+        uploadAvatar,
+        removeAvatar
       }}
     >
       {children}

@@ -299,19 +299,37 @@ export interface FilterOptions {
   page?: number;
 }
 
+export interface ThemeConfig {
+  id?: string;
+  name?: string;
+  primaryAccent: string;
+  secondaryAccent: string;
+  backgroundColor: string;
+  surfaceColor: string;
+  textColor: string;
+  textMutedColor: string;
+  borderRadius: 'sm' | 'md' | 'lg' | 'full';
+  motionIntensity: 'subtle' | 'standard' | 'reduced';
+  mode: 'dark' | 'light';
+  fontDisplay?: string;
+}
+
 export interface SiteSettings {
   siteName: string;
   siteTagline: string;
   siteDescription: string;
   logoUrl?: string;
+  faviconUrl?: string;
   badgeUrl?: string;
   watermarkEnabled: boolean;
   watermarkOpacity: number;
   watermarkPosition: 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left';
+  watermarkMoving?: boolean;
   maintenanceMode: boolean;
   defaultQuality: string;
   allowUserRegistrations: boolean;
   providers?: VideoProvider[];
+  theme?: ThemeConfig;
 }
 
 export interface VideoProvider {

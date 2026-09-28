@@ -20,6 +20,7 @@ import {
   EpisodeItem,
   HomepageSectionConfig,
   SiteSettings,
+  ThemeConfig,
   WatchProgress,
   AuditLog,
   UserReview,
@@ -62,19 +63,39 @@ export const COLLECTIONS = {
   WATCH_HISTORY: 'watchHistory',
   REVIEWS: 'reviews',
   ADMINS: 'admins',
-  SYSTEM: 'system'
+  SYSTEM: 'system',
+  THEMES: 'themes',
+  SUBTITLES: 'subtitles'
+};
+
+export const DEFAULT_THEME: ThemeConfig = {
+  id: 'theme-default',
+  name: 'Cinexus Obsidian Red',
+  primaryAccent: '#e50914',
+  secondaryAccent: '#ff2a3b',
+  backgroundColor: '#07090e',
+  surfaceColor: '#0f141f',
+  textColor: '#f8fafc',
+  textMutedColor: '#94a3b8',
+  borderRadius: 'lg',
+  motionIntensity: 'standard',
+  mode: 'dark'
 };
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   siteName: 'CINEXUS',
   siteTagline: 'STREAM. WATCH. EXPERIENCE.',
   siteDescription: 'Next-generation ultra cinema platform with master 4K streaming feeds.',
+  logoUrl: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_000000008aa48211972e3a8c2b195dbe.png',
+  faviconUrl: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_000000008aa48211972e3a8c2b195dbe.png',
   watermarkEnabled: true,
   watermarkOpacity: 0.7,
   watermarkPosition: 'top-right',
+  watermarkMoving: false,
   maintenanceMode: false,
   defaultQuality: '4K',
-  allowUserRegistrations: true
+  allowUserRegistrations: true,
+  theme: DEFAULT_THEME
 };
 
 // ==========================================
@@ -358,6 +379,23 @@ export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.SETTINGS}/global_config`);
   }
+}
+
+export function subscribeSiteSettings(callback: (settings: SiteSettings) => void) {
+  const docRef = doc(db, COLLECTIONS.SETTINGS, 'global_config');
+  return onSnapshot(
+    docRef,
+    (snap) => {
+      if (snap.exists()) {
+        callback({ ...DEFAULT_SITE_SETTINGS, ...snap.data() } as SiteSettings);
+      } else {
+        callback(DEFAULT_SITE_SETTINGS);
+      }
+    },
+    (err) => {
+      console.warn('[Firestore] subscribeSiteSettings warning:', err);
+    }
+  );
 }
 
 // ==========================================

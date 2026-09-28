@@ -21,7 +21,7 @@ import {
   Check,
   Tv
 } from 'lucide-react';
-import { MovieItem, EpisodeItem, VideoSource, ServerEmbeds } from '../../types';
+import { MovieItem, EpisodeItem, VideoSource, ServerEmbeds, SubtitleTrack } from '../../types';
 import { usePlayer } from '../../context/PlayerContext';
 import { getPlaybackSources, PlaybackSource } from '../../services/embedParser';
 
@@ -63,7 +63,29 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
 
-  // Sources & Servers
+  // Subtitle management
+  const availableSubtitles: SubtitleTrack[] = [
+    ...((activeEpisode?.subtitles?.length ? activeEpisode.subtitles : activeContent?.subtitles) || []),
+    { id: 'sub-en', label: 'English (CC)', language: 'en', src: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/subtitles/sample_en.vtt' },
+    { id: 'sub-si', label: 'Sinhala (සිංහල උපසිරැසි)', language: 'si', src: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/subtitles/sample_si.vtt' }
+  ];
+
+  const handleSubtitleChange = (lang: string) => {
+    setActiveSubtitle(lang);
+    setShowSubtitleMenu(false);
+    if (videoRef.current && videoRef.current.textTracks) {
+      for (let i = 0; i < videoRef.current.textTracks.length; i++) {
+        const track = videoRef.current.textTracks[i];
+        if (lang === 'off') {
+          track.mode = 'disabled';
+        } else if (track.language === lang || track.label.toLowerCase().includes(lang.toLowerCase())) {
+          track.mode = 'showing';
+        } else {
+          track.mode = 'disabled';
+        }
+      }
+    }
+  };
   const [sources, setSources] = useState<PlaybackSource[]>([]);
   const [activeSourceIndex, setActiveSourceIndex] = useState(0);
 
@@ -442,6 +464,19 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
         )}
       </div>
 
+      {/* Official CINEXUS Player Watermark */}
+      <div 
+        className={`absolute top-4 right-5 sm:right-6 z-20 pointer-events-none transition-all duration-300 select-none ${
+          showControls ? 'opacity-85' : 'opacity-60'
+        }`}
+      >
+        <img
+          src="https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_000000008aa48211972e3a8c2b195dbe.png"
+          alt="CINEXUS Watermark"
+          className="h-5 sm:h-6 w-auto object-contain filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
+        />
+      </div>
+
       {/* Main Video Element or Iframe Embed */}
       {currentSource?.type === 'iframe' ? (
         <iframe
@@ -467,7 +502,19 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
           onClick={togglePlay}
           className="w-full h-full object-contain cursor-pointer"
           playsInline
-        />
+          crossOrigin="anonymous"
+        >
+          {availableSubtitles.map((sub) => (
+            <track
+              key={sub.id}
+              kind="subtitles"
+              src={sub.src}
+              srcLang={sub.language}
+              label={sub.label}
+              default={activeSubtitle === sub.language}
+            />
+          ))}
+        </video>
       )}
 
       {/* Buffering Indicator */}
@@ -532,7 +579,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
             <button onClick={() => setShowServerMenu(false)} className="text-zinc-400 hover:text-white">✕</button>
           </div>
           <div className="space-y-1.5 max-h-60 overflow-y-auto">
-            {sources.map((src, idx) => (
+            {sources.map((src: PlaybackSource, idx: number) => (
               <button
                 key={src.id}
                 onClick={() => {
@@ -593,6 +640,42 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
               >
                 <span>{q}</span>
                 {activeQuality === q && <Check className="w-3.5 h-3.5 text-red-500" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Subtitles (CC) Flyout Menu */}
+      {showSubtitleMenu && (
+        <div className="absolute bottom-20 right-14 z-40 w-64 p-3 rounded-2xl bg-zinc-950/95 border border-white/15 shadow-2xl backdrop-blur-xl text-xs text-white animate-fadeIn">
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/10 font-semibold text-zinc-300">
+            <span className="flex items-center gap-2">
+              <Subtitles className="w-4 h-4 text-red-500" />
+              <span>Closed Captions & Subtitles</span>
+            </span>
+            <button onClick={() => setShowSubtitleMenu(false)} className="text-zinc-400 hover:text-white cursor-pointer">✕</button>
+          </div>
+          <div className="space-y-1 max-h-48 overflow-y-auto">
+            <button
+              onClick={() => handleSubtitleChange('off')}
+              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-colors cursor-pointer ${
+                activeSubtitle === 'off' ? 'bg-red-600/20 text-red-400 font-semibold border border-red-500/30' : 'hover:bg-white/5 text-zinc-300'
+              }`}
+            >
+              <span>Subtitles Off</span>
+              {activeSubtitle === 'off' && <Check className="w-3.5 h-3.5 text-red-400" />}
+            </button>
+            {availableSubtitles.map((sub) => (
+              <button
+                key={sub.id}
+                onClick={() => handleSubtitleChange(sub.language)}
+                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-colors cursor-pointer ${
+                  activeSubtitle === sub.language ? 'bg-red-600/20 text-red-400 font-semibold border border-red-500/30' : 'hover:bg-white/5 text-zinc-300'
+                }`}
+              >
+                <span>{sub.label}</span>
+                {activeSubtitle === sub.language && <Check className="w-3.5 h-3.5 text-red-400" />}
               </button>
             ))}
           </div>
@@ -698,6 +781,15 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
                   <SkipForward className="w-4 h-4" />
                 </button>
               )}
+
+              {/* Subtitles (CC) */}
+              <button
+                onClick={() => setShowSubtitleMenu((v) => !v)}
+                className={`p-2 transition-colors cursor-pointer ${activeSubtitle !== 'off' ? 'text-red-500 font-bold' : 'text-zinc-300 hover:text-white'}`}
+                title="Subtitles & Audio (CC)"
+              >
+                <Subtitles className="w-4 h-4" />
+              </button>
 
               {/* Theater Mode */}
               <button

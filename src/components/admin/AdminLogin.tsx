@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { Logo } from '../common/Logo';
 import { Lock, Mail, ShieldAlert, ArrowRight, Loader2 } from 'lucide-react';
 
 interface AdminLoginProps {
@@ -34,18 +35,16 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
 
   return (
     <div className="min-h-screen bg-[#040508] text-white flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md p-8 rounded-2xl bg-zinc-950 border border-white/10 shadow-2xl space-y-6">
+      <div className="w-full max-w-md p-8 rounded-3xl bg-[#0b0f17] border border-white/10 shadow-2xl space-y-6">
         
-        {/* Brand Lockup */}
-        <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-xl bg-red-600/10 border border-red-500/20 text-red-500 flex items-center justify-center mx-auto mb-3">
-            <Lock className="w-6 h-6" />
-          </div>
-          <h1 className="text-xl font-bold tracking-wider uppercase font-display">
-            CINEXUS Studio CMS
+        {/* Brand Lockup with Official Logo */}
+        <div className="text-center flex flex-col items-center space-y-2">
+          <Logo size="lg" className="mb-2" />
+          <h1 className="text-lg font-bold tracking-wider uppercase font-display text-white">
+            Studio CMS Console
           </h1>
           <p className="text-xs text-zinc-400">
-            Administrative Access Control & Media Management Console
+            Administrative Access Control & Realtime Media Manager
           </p>
         </div>
 

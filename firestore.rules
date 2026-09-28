@@ -48,14 +48,24 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Platform Settings
+    // Platform Settings & Themes
     match /settings/{settingId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Streaming Sources
+    match /themes/{themeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Streaming Sources & Subtitles
     match /streamSources/{sourceId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /subtitles/{subtitleId} {
       allow read: if true;
       allow write: if isAdmin();
     }

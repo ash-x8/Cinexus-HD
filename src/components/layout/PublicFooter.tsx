@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { Logo } from '../common/Logo';
 
 export const PublicFooter: React.FC = () => {
   return (
@@ -8,8 +9,8 @@ export const PublicFooter: React.FC = () => {
         
         {/* Brand & Legal statement */}
         <div className="space-y-3 max-w-sm">
-          <Link to="/" className="text-xl font-bold tracking-widest text-white uppercase font-display">
-            CINEXUS
+          <Link to="/" className="inline-block">
+            <Logo size="md" showSubtitle={false} />
           </Link>
           <p className="leading-relaxed text-zinc-400">
             Next-generation cinema discovery & streaming experience. Ultra 4K master feeds, lossless Dolby Atmos soundtracks, and synchronized translations.

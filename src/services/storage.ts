@@ -94,3 +94,79 @@ export async function getMediaFiles(): Promise<MediaFile[]> {
     return [];
   }
 }
+
+export async function uploadUserProfilePhoto(
+  userId: string,
+  file: File,
+  onProgress?: UploadProgressCallback
+): Promise<string> {
+  const maxBytes = 8 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    throw new Error('Avatar image exceeds 8MB maximum size limit.');
+  }
+
+  const fileExt = file.name.split('.').pop() || 'jpg';
+  const storagePath = `users/${userId}/avatars/${Date.now()}.${fileExt}`;
+  const storageRef = ref(storage, storagePath);
+
+  const uploadTask = uploadBytesResumable(storageRef, file, {
+    contentType: file.type,
+    customMetadata: { userId, type: 'avatar' }
+  });
+
+  return new Promise((resolve, reject) => {
+    uploadTask.on(
+      'state_changed',
+      (snapshot) => {
+        const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+        if (onProgress) {
+          onProgress(percent, snapshot.bytesTransferred, snapshot.totalBytes);
+        }
+      },
+      (error) => reject(error),
+      async () => {
+        try {
+          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+          resolve(downloadUrl);
+        } catch (err) {
+          reject(err);
+        }
+      }
+    );
+  });
+}
+
+export async function uploadSubtitleFile(
+  contentId: string,
+  file: File,
+  language: string,
+  onProgress?: UploadProgressCallback
+): Promise<{ url: string; path: string }> {
+  const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const storagePath = `subtitles/${contentId}/${Date.now()}_${cleanName}`;
+  const storageRef = ref(storage, storagePath);
+
+  const uploadTask = uploadBytesResumable(storageRef, file, {
+    contentType: 'text/vtt',
+    customMetadata: { contentId, language }
+  });
+
+  return new Promise((resolve, reject) => {
+    uploadTask.on(
+      'state_changed',
+      (snapshot) => {
+        const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+        if (onProgress) onProgress(percent, snapshot.bytesTransferred, snapshot.totalBytes);
+      },
+      (err) => reject(err),
+      async () => {
+        try {
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          resolve({ url, path: storagePath });
+        } catch (e) {
+          reject(e);
+        }
+      }
+    );
+  });
+}

@@ -1,24 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   X, 
   User, 
-  Shield, 
   Bookmark, 
   History, 
-  Settings, 
   LogOut, 
   Play, 
   Trash2, 
   Check, 
-  Sparkles, 
   Film, 
   SlidersHorizontal,
-  ExternalLink,
-  Tv
+  Upload,
+  AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { MovieItem, WatchProgress } from '../../types';
-import { BRANDING } from '../../config/branding';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -28,7 +24,6 @@ interface UserProfileModalProps {
   allMovies?: MovieItem[];
   onPlayMovie?: (movie: MovieItem, episodeId?: string) => void;
   onOpenMovieDetail?: (movie: MovieItem) => void;
-  onOpenAdmin?: () => void;
   onClearHistory?: () => void;
 }
 
@@ -51,15 +46,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   allMovies = [],
   onPlayMovie = () => {},
   onOpenMovieDetail,
-  onOpenAdmin = () => {},
   onClearHistory = () => {}
 }) => {
-  const { user, logout, updateProfile, openAuthModal } = useAuth();
+  const { user, logout, updateProfile, openAuthModal, uploadAvatar, removeAvatar } = useAuth();
   const [activeTab, setActiveTab] = useState<'profile' | 'history' | 'preferences'>('profile');
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(user?.name || '');
   const [editAvatar, setEditAvatar] = useState(user?.avatarUrl || PRESET_AVATARS[0]);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Preferences
   const [defaultQuality, setDefaultQuality] = useState(user?.preferences?.defaultQuality || '4K');
@@ -101,16 +98,42 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     );
   }
 
-  const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
   const historyList = Object.values(watchProgressMap || {}).sort((a, b) => 
     new Date(b?.lastWatchedAt || 0).getTime() - new Date(a?.lastWatchedAt || 0).getTime()
   );
   const watchlistCount = Array.isArray(watchlist) ? watchlist.length : 0;
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setErrorMessage(null);
+    setUploadLoading(true);
+    try {
+      const downloadUrl = await uploadAvatar(file);
+      setEditAvatar(downloadUrl);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to upload image.');
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    try {
+      await removeAvatar();
+      setEditAvatar(PRESET_AVATARS[0]);
+    } catch (err: any) {
+      console.warn('Remove avatar error:', err);
+    }
+  };
+
   const handleSaveProfile = async () => {
     try {
       await updateProfile({
-        name: editName,
+        name: editName.trim() || user.name,
         avatarUrl: editAvatar,
         preferences: {
           defaultQuality: defaultQuality as any,
@@ -118,35 +141,41 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           autoplayNext
         }
       });
-      setIsEditing(false);
       setSaveSuccess(true);
+      setIsEditing(false);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      setErrorMessage('Could not update profile details.');
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-[#0b0f17] border border-slate-800/90 rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+      <div className="relative w-full max-w-2xl bg-[#0b0f17] border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
-        {/* Modal Header */}
-        <div className="p-4 sm:p-6 border-b border-slate-800/80 bg-gradient-to-r from-red-950/30 via-slate-900 to-black/60 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative">
+        {/* Top Header Card */}
+        <div className="relative p-6 sm:p-8 bg-gradient-to-r from-red-950/40 via-slate-900/60 to-[#0b0f17] border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="relative group">
               <img
                 src={user.avatarUrl || PRESET_AVATARS[0]}
                 alt={user.name}
-                className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl object-cover border-2 border-red-500/80 shadow-lg shadow-red-950/40"
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-red-500/50 shadow-lg shadow-red-950/40"
               />
-              <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-red-600 text-[9px] font-extrabold text-white uppercase tracking-wider">
-                {user.role}
+              <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-[#0b0f17] flex items-center justify-center text-[10px] text-black font-black" title="Verified Member">
+                ✓
               </span>
             </div>
+
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                <span>{user.name}</span>
-                {isAdmin && <Shield className="w-4 h-4 text-red-400" />}
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-full bg-red-600/20 border border-red-500/40 text-red-400 text-[10px] font-bold uppercase tracking-wider">
+                  CINEXUS Premier Member
+                </span>
+              </div>
+              <h2 className="text-lg sm:text-xl font-bold font-display text-white mt-1">
+                {user.name}
               </h2>
               <p className="text-xs text-slate-400 font-mono">{user.email}</p>
             </div>
@@ -154,7 +183,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-2 rounded-2xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-white transition-all"
+            className="p-2 rounded-2xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-white transition-all cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -209,6 +238,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </div>
           )}
 
+          {errorMessage && (
+            <div className="p-3 rounded-2xl bg-red-950/60 border border-red-700/60 text-red-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
           {/* TAB 1: Profile & Account Details */}
           {activeTab === 'profile' && (
             <div className="space-y-6">
@@ -226,8 +262,40 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     />
                   </div>
 
+                  {/* Profile Photo Upload / Choose */}
                   <div className="space-y-2">
-                    <label className="text-xs text-slate-400 font-medium">Choose Cinematic Avatar</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-slate-400 font-medium">Profile Photo</label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploadLoading}
+                          className="px-2.5 py-1 rounded-lg bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-red-300 text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>{uploadLoading ? 'Uploading...' : 'Upload from Device'}</span>
+                        </button>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleFileUpload}
+                        />
+                        {user.avatarUrl && (
+                          <button
+                            type="button"
+                            onClick={handleRemovePhoto}
+                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold cursor-pointer"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-slate-500">Or select from curated cinema presets:</p>
                     <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
                       {PRESET_AVATARS.map((url, i) => (
                         <button
@@ -253,14 +321,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsEditing(false)}
-                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button
                       type="button"
                       onClick={handleSaveProfile}
-                      className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-md shadow-red-950/40"
+                      className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-md shadow-red-950/40 cursor-pointer"
                     >
                       Save Changes
                     </button>
@@ -269,10 +337,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-1">
-                    <span className="text-[11px] text-slate-400">Account Type</span>
+                    <span className="text-[11px] text-slate-400">Membership Tier</span>
                     <div className="text-xs font-bold text-white flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                      <span>{user.role === 'SUPER_ADMIN' ? 'Super Administrator' : user.role === 'ADMIN' ? 'Studio Administrator' : 'VIP Member'}</span>
+                      <span>CINEXUS Premier Member</span>
                     </div>
                   </div>
 
@@ -330,74 +398,83 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           {activeTab === 'history' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-400 font-medium">Continue Watching ({historyList.length})</span>
+                <span className="text-xs text-slate-400">
+                  Showing your resume progress across all devices
+                </span>
                 {historyList.length > 0 && (
                   <button
                     onClick={onClearHistory}
-                    className="text-[11px] text-red-400 hover:text-red-300 flex items-center gap-1 transition-colors cursor-pointer"
+                    className="text-xs text-red-400 hover:text-red-300 font-medium flex items-center gap-1 cursor-pointer"
                   >
-                    <Trash2 className="w-3 h-3" />
-                    <span>Clear Watch History</span>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Clear All</span>
                   </button>
                 )}
               </div>
 
               {historyList.length === 0 ? (
-                <div className="p-8 text-center rounded-2xl bg-slate-900/40 border border-slate-800/60 space-y-2">
-                  <Film className="w-8 h-8 text-slate-600 mx-auto" />
-                  <p className="text-xs text-slate-400">No watched titles yet. Stream any movie or series to track your progress.</p>
+                <div className="py-12 text-center text-slate-500 space-y-2">
+                  <Film className="w-10 h-10 mx-auto text-slate-600" />
+                  <p className="text-xs font-medium">No watch history yet</p>
+                  <p className="text-[11px] text-slate-600">Start watching any title to track resume progress.</p>
                 </div>
               ) : (
-                <div className="space-y-2.5">
-                  {historyList.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 rounded-2xl bg-slate-900/70 border border-slate-800/80 flex items-center justify-between gap-3 hover:border-slate-700 transition-all"
-                    >
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        {item.posterPath ? (
-                          <img
-                            src={item.posterPath}
-                            alt={item.title || 'Movie'}
-                            className="w-10 h-14 rounded-lg object-cover border border-slate-700 shrink-0"
-                          />
-                        ) : (
-                          <div className="w-10 h-14 rounded-lg bg-slate-800 flex items-center justify-center shrink-0">
-                            <Film className="w-5 h-5 text-slate-600" />
+                <div className="space-y-2">
+                  {historyList.map((hist) => {
+                    const matchedMovie = allMovies.find((m) => m.id === hist.contentId || m.id === hist.movieId);
+                    const title = hist.title || matchedMovie?.title || 'Featured Cinema';
+                    const poster = hist.posterPath || matchedMovie?.posterUrl || matchedMovie?.posterPath;
+                    const percent = Math.round(hist.percentage || 0);
+
+                    return (
+                      <div
+                        key={hist.contentId + (hist.episodeId || '')}
+                        className="flex items-center justify-between p-3 rounded-2xl bg-slate-900/40 hover:bg-slate-900 border border-slate-800/80 transition-all group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-14 rounded-lg overflow-hidden bg-slate-800 shrink-0">
+                            {poster ? (
+                              <img src={poster} alt={title} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-slate-600">
+                                <Film className="w-4 h-4" />
+                              </div>
+                            )}
                           </div>
-                        )}
-                        <div className="overflow-hidden">
-                          <h4 className="text-xs font-bold text-white truncate">{item.title || 'Untitled'}</h4>
-                          <p className="text-[10px] text-slate-400">
-                            {item.episodeTitle ? `S${item.seasonNumber || 1}:E${item.episodeNumber || 1} • ${item.episodeTitle}` : `${Math.round(item.percentage || 0)}% completed`}
-                          </p>
-                          <div className="w-24 h-1 bg-slate-800 rounded-full mt-1.5 overflow-hidden">
-                            <div
-                              className="h-full bg-red-600 rounded-full"
-                              style={{ width: `${Math.min(100, Math.max(0, item.percentage || 0))}%` }}
-                            />
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold text-white truncate">{title}</h4>
+                            {hist.episodeTitle && (
+                              <p className="text-[10px] text-slate-400 truncate">
+                                S{hist.seasonNumber} E{hist.episodeNumber}: {hist.episodeTitle}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 mt-1">
+                              <div className="w-24 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                                <div
+                                  className="h-full bg-red-600 rounded-full"
+                                  style={{ width: `${Math.min(100, Math.max(5, percent))}%` }}
+                                />
+                              </div>
+                              <span className="text-[10px] font-mono text-slate-400">{percent}%</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <button
-                        onClick={() => {
-                          const movieObj: any = {
-                            id: item.movieId || item.contentId || 'unknown',
-                            title: item.title || 'Movie',
-                            posterPath: item.posterPath,
-                            demoVideoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
-                          };
-                          onClose();
-                          onPlayMovie(movieObj, item.contentId);
-                        }}
-                        className="p-2 rounded-xl bg-red-600 hover:bg-red-500 text-white transition-all shrink-0 cursor-pointer shadow-md shadow-red-950/40"
-                        title="Resume Playback"
-                      >
-                        <Play className="w-4 h-4 fill-white" />
-                      </button>
-                    </div>
-                  ))}
+                        {matchedMovie && (
+                          <button
+                            onClick={() => {
+                              onClose();
+                              onPlayMovie(matchedMovie, hist.episodeId);
+                            }}
+                            className="p-2 rounded-xl bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white transition-all cursor-pointer"
+                            title="Resume Playback"
+                          >
+                            <Play className="w-4 h-4 fill-current" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -406,52 +483,61 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           {/* TAB 3: Preferences */}
           {activeTab === 'preferences' && (
             <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300">Default Streaming Quality</label>
-                <select
-                  value={defaultQuality}
-                  onChange={(e) => setDefaultQuality(e.target.value as '4K' | '1080p' | 'Auto')}
-                  className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
-                >
-                  <option value="4K">4K Ultra HD (2160p Master)</option>
-                  <option value="1080p">1080p Full HD</option>
-                  <option value="Auto">Auto (Adaptive Bitrate)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300">Preferred Subtitle Language</label>
-                <select
-                  value={defaultSubtitle}
-                  onChange={(e) => setDefaultSubtitle(e.target.value)}
-                  className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
-                >
-                  <option value="Sinhala (සිංහල උපසිරැසි)">Sinhala (සිංහල උපසිරැසි)</option>
-                  <option value="English [CC]">English [CC]</option>
-                  <option value="Off">Subtitles Off</option>
-                </select>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-bold text-white">Autoplay Next Episode</div>
-                  <div className="text-[11px] text-slate-400">Automatically stream the next TV episode when finished</div>
+              <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Default Video Resolution</h4>
+                    <p className="text-[11px] text-slate-400">Preferred streaming quality when available</p>
+                  </div>
+                  <select
+                    value={defaultQuality}
+                    onChange={(e) => setDefaultQuality(e.target.value as any)}
+                    className="bg-[#07090e] border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-1.5 outline-none cursor-pointer"
+                  >
+                    <option value="4K">4K Ultra HD (2160p)</option>
+                    <option value="1080p">Full HD (1080p)</option>
+                    <option value="Auto">Adaptive Bitrate (Auto)</option>
+                  </select>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={autoplayNext}
-                  onChange={(e) => setAutoplayNext(e.target.checked)}
-                  className="w-4 h-4 accent-red-600 rounded cursor-pointer"
-                />
+
+                <div className="border-t border-slate-800 pt-3 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Default Subtitle Language</h4>
+                    <p className="text-[11px] text-slate-400">Automatically activate closed captions in this language</p>
+                  </div>
+                  <select
+                    value={defaultSubtitle}
+                    onChange={(e) => setDefaultSubtitle(e.target.value)}
+                    className="bg-[#07090e] border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-1.5 outline-none cursor-pointer"
+                  >
+                    <option value="Sinhala (සිංහල උපසිරැසි)">Sinhala (සිංහල උපසිරැසි)</option>
+                    <option value="English">English (Original Audio CC)</option>
+                    <option value="Tamil">Tamil (தமிழ்)</option>
+                    <option value="Off">Subtitles Off</option>
+                  </select>
+                </div>
+
+                <div className="border-t border-slate-800 pt-3 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Continuous Auto-Play Next Episode</h4>
+                    <p className="text-[11px] text-slate-400">Queue and launch the next sequential chapter automatically</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={autoplayNext}
+                    onChange={(e) => setAutoplayNext(e.target.checked)}
+                    className="w-4 h-4 accent-red-600 rounded cursor-pointer"
+                  />
+                </div>
               </div>
 
-              <div className="pt-2 flex justify-end">
+              <div className="flex justify-end pt-2">
                 <button
                   type="button"
                   onClick={handleSaveProfile}
-                  className="px-5 py-2.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-lg shadow-red-950/40 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-md shadow-red-950/40 cursor-pointer"
                 >
-                  Save Cinema Preferences
+                  Save Preferences
                 </button>
               </div>
             </div>

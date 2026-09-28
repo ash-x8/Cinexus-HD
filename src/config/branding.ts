@@ -12,6 +12,10 @@ export const BRANDING = {
   shortName: 'CINEXUS',
   legalNotice: 'CINEXUS Entertainment. All streams and embeds require verified distribution authorization.',
   
+  // Official Brand Assets
+  logoUrl: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_000000008aa48211972e3a8c2b195dbe.png',
+  faviconUrl: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_000000008aa48211972e3a8c2b195dbe.png',
+  
   // Theme Color System
   colors: {
     primary: '#e50914',

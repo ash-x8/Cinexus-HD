@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { Logo } from '../common/Logo';
 import {
   LayoutDashboard,
   Film,
@@ -77,14 +78,14 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ activeTab, onTabChange
       
       {/* Mobile Top Bar */}
       <div className="md:hidden flex items-center justify-between p-4 bg-[#0a0d14] border-b border-white/10 sticky top-0 z-40">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => setSidebarOpen((v) => !v)}
             className="p-2 rounded-lg bg-white/5 text-zinc-300"
           >
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
-          <span className="font-bold tracking-wider uppercase text-sm">CINEXUS Studio</span>
+          <Logo size="xs" showSubtitle={false} />
         </div>
         <Link to="/" target="_blank" className="p-2 text-zinc-400 hover:text-white" title="View Public Site">
           <ExternalLink className="w-4 h-4" />
@@ -99,14 +100,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ activeTab, onTabChange
       >
         <div>
           {/* Logo Header */}
-          <div className="p-5 border-b border-white/10 flex items-center justify-between">
-            <div>
-              <div className="font-bold tracking-widest text-white text-base font-display">
-                CINEXUS STUDIO
-              </div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">
-                Master CMS Console
-              </div>
+          <div className="p-5 border-b border-white/10 flex flex-col items-start gap-1">
+            <Logo size="sm" showSubtitle={false} />
+            <div className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">
+              Master CMS Console
             </div>
           </div>
 
