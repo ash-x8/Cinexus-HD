@@ -103,7 +103,7 @@ export const WatchPage: React.FC<WatchPageProps> = ({
             currentEpisode={currentEpisode}
             allEpisodes={episodes}
             onTimeUpdate={handleTimeUpdate}
-            onEpisodeChange={(ep) => setCurrentEpisodeId(ep.id)}
+            onEpisodeChange={(ep: EpisodeItem) => setCurrentEpisodeId(ep.id)}
             onClose={onBack}
           />
         </div>

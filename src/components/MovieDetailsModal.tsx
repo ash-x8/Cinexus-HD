@@ -352,7 +352,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                     <span>Behind-The-Scenes Trivia</span>
                   </h4>
                   <ul className="space-y-1.5 text-xs text-slate-300 list-disc list-inside">
-                    {movie.trivia.map((item, idx) => (
+                    {movie.trivia.map((item: string, idx: number) => (
                       <li key={idx} className="leading-relaxed">{item}</li>
                     ))}
                   </ul>
@@ -367,7 +367,7 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
                     <span>Official Motion Picture Soundtrack</span>
                   </h3>
                   <div className="space-y-2">
-                    {movie.soundtracks.map((st, idx) => (
+                    {movie.soundtracks.map((st: { title: string; artist: string; duration?: string }, idx: number) => (
                       <div 
                         key={idx}
                         className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs"

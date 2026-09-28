@@ -1,475 +1,518 @@
-import { 
-  collection, 
-  doc, 
-  getDocs, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc, 
-  onSnapshot, 
-  query, 
-  where, 
-  orderBy, 
-  limit, 
-  serverTimestamp,
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  onSnapshot,
   writeBatch
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { 
-  MovieItem, 
-  EpisodeItem, 
-  HomepageSectionConfig, 
-  SiteSettings, 
-  AuditLog, 
+import { db, auth } from '../lib/firebase';
+import {
+  MovieItem,
+  SeriesItem,
+  EpisodeItem,
+  HomepageSectionConfig,
+  SiteSettings,
   WatchProgress,
-  UserProfile 
+  AuditLog,
+  UserReview,
+  UserProfile
 } from '../types';
-import { MOVIES_DATABASE } from '../data/moviesData';
 
-const COLLECTIONS = {
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous
+    },
+    operationType,
+    path
+  };
+  console.error('[Firestore Error]:', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+export const COLLECTIONS = {
   MOVIES: 'movies',
   SERIES: 'series',
   EPISODES: 'episodes',
   HOMEPAGE: 'homepageSections',
   SETTINGS: 'settings',
-  AUDIT: 'auditLogs',
+  AUDIT_LOGS: 'auditLogs',
   USERS: 'users',
-  WATCHLISTS: 'watchlists',
-  HISTORY: 'watchHistory'
+  WATCH_HISTORY: 'watchHistory',
+  REVIEWS: 'reviews',
+  ADMINS: 'admins',
+  SYSTEM: 'system'
 };
 
-// Default dynamic homepage rails configuration
-export const DEFAULT_HOMEPAGE_SECTIONS: HomepageSectionConfig[] = [
-  {
-    id: 'trending-today',
-    title: 'Trending Today Across CINEXUS',
-    subtitle: 'Highest stream density & 4K viewership in real-time',
-    type: 'curated_row',
-    contentSource: 'featured',
-    badge: 'HOT',
-    limit: 12,
-    order: 1,
-    enabled: true,
-    filterGenre: 'all',
-    filterQuality: 'all'
-  },
-  {
-    id: 'sinhala-subtitles',
-    title: 'Sinhala Subtitled 4K Blockbusters (සිංහල උපසිරැසි)',
-    subtitle: 'Synchronized master Sinhala translation tracks',
-    type: 'curated_row',
-    contentSource: 'latest',
-    badge: 'SINHALA SUB',
-    limit: 12,
-    order: 2,
-    enabled: true,
-    filterGenre: 'all',
-    filterQuality: 'all'
-  },
-  {
-    id: 'four-k-masters',
-    title: '4K Ultra HD & IMAX Enhanced Cinema',
-    subtitle: 'Master visual tracks with Dolby Vision HDR & Atmos',
-    type: 'curated_row',
-    contentSource: 'top_rated',
-    badge: '4K MASTER',
-    limit: 12,
-    order: 3,
-    enabled: true,
-    filterGenre: 'all',
-    filterQuality: '4K Ultra HD'
-  },
-  {
-    id: 'cyberpunk-scifi',
-    title: 'Cyberpunk & Sci-Fi Dimensions',
-    subtitle: 'Futuristic thrillers, artificial intelligence & space exploration',
-    type: 'genre_row',
-    contentSource: 'genre',
-    limit: 12,
-    order: 4,
-    enabled: true,
-    filterGenre: 'Sci-Fi',
-    filterQuality: 'all'
-  },
-  {
-    id: 'imax-wildlife',
-    title: 'IMAX Wildlife & Earth Expeditions',
-    subtitle: 'Stunning planetary visuals captured in native 8K sensors',
-    type: 'genre_row',
-    contentSource: 'genre',
-    limit: 12,
-    order: 5,
-    enabled: true,
-    filterGenre: 'Documentary',
-    filterQuality: 'all'
-  }
-];
-
-// Default site settings
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   siteName: 'CINEXUS',
   siteTagline: 'STREAM. WATCH. EXPERIENCE.',
-  siteDescription: 'Ultra 4K Cinema Discovery & Streaming Platform with master quality feeds.',
+  siteDescription: 'Next-generation ultra cinema platform with master 4K streaming feeds.',
   watermarkEnabled: true,
-  watermarkOpacity: 0.75,
+  watermarkOpacity: 0.7,
   watermarkPosition: 'top-right',
   maintenanceMode: false,
   defaultQuality: '4K',
-  allowUserRegistrations: true,
-  providers: [
-    { id: 'p1', name: 'CINEXUS Dedicated HLS Stream', domain: 'cdn.cinexus.app', enabled: true },
-    { id: 'p2', name: 'Cloud Storage Direct Media', domain: 'commondatastorage.googleapis.com', enabled: true },
-    { id: 'p3', name: 'YouTube Official 4K Embed', domain: 'youtube.com', enabled: true },
-    { id: 'p4', name: 'Mux Video Engine', domain: 'stream.mux.com', enabled: true }
-  ]
+  allowUserRegistrations: true
 };
 
 // ==========================================
-// 1. SEEDING & INITIALIZATION
+// 1. MOVIES (REALTIME & CRUD)
 // ==========================================
 
-export async function initializeFirestoreDatabase(): Promise<void> {
-  try {
-    const moviesRef = collection(db, COLLECTIONS.MOVIES);
-    const snap = await getDocs(query(moviesRef, limit(1)));
-
-    if (snap.empty) {
-      console.log('[CINEXUS Firestore] Initializing Firestore master catalog...');
-      const batch = writeBatch(db);
-
-      // Seed curated titles into Firestore
-      MOVIES_DATABASE.forEach((movie) => {
-        // Strip any mock demo links
-        const cleanMovie: MovieItem = {
-          ...movie,
-          // If demoVideoUrl was BigBuckBunny, clear it out or leave real sources
-          demoVideoUrl: movie.demoVideoUrl?.includes('BigBuckBunny') ? '' : movie.demoVideoUrl,
-          sources: movie.sources && movie.sources.length > 0 
-            ? movie.sources.filter(s => !s.url.includes('BigBuckBunny'))
-            : (movie.trailerYoutubeId ? [
-                {
-                  id: `src-yt-${movie.id}`,
-                  title: 'Official 4K Trailer Stream',
-                  url: `https://www.youtube.com/embed/${movie.trailerYoutubeId}?autoplay=1`,
-                  type: 'youtube',
-                  quality: '4K',
-                  isDefault: true,
-                  enabled: true
-                }
-              ] : []),
-          isPublished: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-
-        const docRef = doc(db, COLLECTIONS.MOVIES, movie.id);
-        batch.set(docRef, cleanMovie);
-      });
-
-      // Seed Homepage rails
-      DEFAULT_HOMEPAGE_SECTIONS.forEach((sec) => {
-        const secRef = doc(db, COLLECTIONS.HOMEPAGE, sec.id);
-        batch.set(secRef, sec);
-      });
-
-      // Seed Global Settings
-      const settingsRef = doc(db, COLLECTIONS.SETTINGS, 'global_config');
-      batch.set(settingsRef, DEFAULT_SITE_SETTINGS);
-
-      await batch.commit();
-      console.log('[CINEXUS Firestore] Master catalog initialized successfully.');
+export function subscribeMovies(callback: (movies: MovieItem[]) => void) {
+  const colRef = collection(db, COLLECTIONS.MOVIES);
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as MovieItem));
+      callback(items);
+    },
+    (err) => {
+      console.warn('[Firestore] subscribeMovies error:', err);
     }
+  );
+}
+
+export async function getMovies(): Promise<MovieItem[]> {
+  try {
+    const snap = await getDocs(collection(db, COLLECTIONS.MOVIES));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as MovieItem));
   } catch (error) {
-    console.warn('[CINEXUS Firestore] Initialization note (rules or offline):', error);
+    handleFirestoreError(error, OperationType.LIST, COLLECTIONS.MOVIES);
+    return [];
   }
 }
 
-// ==========================================
-// 2. MOVIES CRUD
-// ==========================================
-
-export async function getMoviesFromFirestore(): Promise<MovieItem[]> {
+export async function getMovieBySlugOrId(identifier: string): Promise<MovieItem | null> {
   try {
-    const moviesRef = collection(db, COLLECTIONS.MOVIES);
-    const snap = await getDocs(moviesRef);
-    if (!snap.empty) {
-      return snap.docs.map(d => ({ id: d.id, ...d.data() } as MovieItem));
-    }
-  } catch (e) {
-    console.warn('[CINEXUS Firestore] Error fetching movies:', e);
-  }
-  return MOVIES_DATABASE;
-}
-
-export async function getMovieByIdFromFirestore(id: string): Promise<MovieItem | null> {
-  try {
-    const docRef = doc(db, COLLECTIONS.MOVIES, id);
+    // 1. Check direct doc ID
+    const docRef = doc(db, COLLECTIONS.MOVIES, identifier);
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       return { id: snap.id, ...snap.data() } as MovieItem;
     }
-  } catch (e) {
-    console.warn('[CINEXUS Firestore] Error fetching movie by ID:', e);
+    // 2. Query by slug
+    const q = query(collection(db, COLLECTIONS.MOVIES), where('slug', '==', identifier), limit(1));
+    const slugSnap = await getDocs(q);
+    if (!slugSnap.empty) {
+      const d = slugSnap.docs[0];
+      return { id: d.id, ...d.data() } as MovieItem;
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, `${COLLECTIONS.MOVIES}/${identifier}`);
+    return null;
   }
-  return MOVIES_DATABASE.find(m => m.id === id || m.slug === id) || null;
 }
 
-export async function saveMovieToFirestore(movie: MovieItem): Promise<void> {
-  const docRef = doc(db, COLLECTIONS.MOVIES, movie.id);
-  const data = {
+export async function saveMovie(movie: MovieItem): Promise<void> {
+  const id = movie.id || `mov_${Date.now()}`;
+  const slug = movie.slug || movie.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  const data: MovieItem = {
     ...movie,
+    id,
+    slug,
+    isPublished: movie.isPublished !== undefined ? movie.isPublished : true,
     updatedAt: new Date().toISOString(),
     createdAt: movie.createdAt || new Date().toISOString()
   };
-  await setDoc(docRef, data, { merge: true });
-}
 
-export async function deleteMovieFromFirestore(id: string): Promise<void> {
-  const docRef = doc(db, COLLECTIONS.MOVIES, id);
-  await deleteDoc(docRef);
-}
-
-// ==========================================
-// 3. TV SERIES & EPISODES CRUD
-// ==========================================
-
-export async function getSeriesFromFirestore(): Promise<MovieItem[]> {
   try {
-    const seriesRef = collection(db, COLLECTIONS.SERIES);
-    const snap = await getDocs(seriesRef);
-    if (!snap.empty) {
-      return snap.docs.map(d => ({ id: d.id, ...d.data() } as MovieItem));
-    }
-  } catch (e) {
-    console.warn('[CINEXUS Firestore] Error fetching series:', e);
+    await setDoc(doc(db, COLLECTIONS.MOVIES, id), data, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.MOVIES}/${id}`);
   }
-  return MOVIES_DATABASE.filter(m => m.mediaType === 'tv' || m.mediaType === 'anime');
 }
 
-export async function saveSeriesToFirestore(series: MovieItem): Promise<void> {
-  const docRef = doc(db, COLLECTIONS.SERIES, series.id);
-  const data = {
-    ...series,
-    mediaType: series.mediaType || 'tv',
-    updatedAt: new Date().toISOString(),
-    createdAt: series.createdAt || new Date().toISOString()
-  };
-  await setDoc(docRef, data, { merge: true });
-}
-
-export async function deleteSeriesFromFirestore(id: string): Promise<void> {
-  const docRef = doc(db, COLLECTIONS.SERIES, id);
-  await deleteDoc(docRef);
-}
-
-export async function getEpisodesForSeries(seriesId: string): Promise<EpisodeItem[]> {
+export async function deleteMovie(id: string): Promise<void> {
   try {
-    const epRef = collection(db, COLLECTIONS.EPISODES);
-    const q = query(epRef, where('seriesId', '==', seriesId), orderBy('seasonNumber', 'asc'));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      return snap.docs.map(d => ({ id: d.id, ...d.data() } as EpisodeItem));
-    }
-  } catch (e) {
-    console.warn('[CINEXUS Firestore] Error fetching episodes:', e);
+    await deleteDoc(doc(db, COLLECTIONS.MOVIES, id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${COLLECTIONS.MOVIES}/${id}`);
   }
-  return [];
 }
 
-export async function saveEpisodeToFirestore(seriesId: string, episode: EpisodeItem): Promise<void> {
-  const epId = episode.id || `ep-${seriesId}-s${episode.seasonNumber || 1}-e${episode.episodeNumber || 1}`;
-  const docRef = doc(db, COLLECTIONS.EPISODES, epId);
-  const data = {
-    ...episode,
-    id: epId,
-    seriesId,
-    updatedAt: new Date().toISOString(),
-    createdAt: episode.airDate || new Date().toISOString()
-  };
-  await setDoc(docRef, data, { merge: true });
-}
-
-export async function deleteEpisodeFromFirestore(episodeId: string): Promise<void> {
-  const docRef = doc(db, COLLECTIONS.EPISODES, episodeId);
-  await deleteDoc(docRef);
-}
-
-// ==========================================
-// 4. HOMEPAGE CMS
-// ==========================================
-
-export async function getHomepageSectionsFromFirestore(): Promise<HomepageSectionConfig[]> {
-  try {
-    const secRef = collection(db, COLLECTIONS.HOMEPAGE);
-    const snap = await getDocs(secRef);
-    if (!snap.empty) {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as HomepageSectionConfig));
-      return list.sort((a, b) => a.order - b.order);
-    }
-  } catch (e) {
-    console.warn('[CINEXUS Firestore] Error fetching sections:', e);
-  }
-  return DEFAULT_HOMEPAGE_SECTIONS;
-}
-
-export async function saveHomepageSectionsToFirestore(sections: HomepageSectionConfig[]): Promise<void> {
+export async function bulkDeleteMovies(ids: string[]): Promise<void> {
   const batch = writeBatch(db);
-  sections.forEach((sec, idx) => {
-    const docRef = doc(db, COLLECTIONS.HOMEPAGE, sec.id);
-    batch.set(docRef, { ...sec, order: idx + 1 });
+  ids.forEach((id) => {
+    batch.delete(doc(db, COLLECTIONS.MOVIES, id));
   });
   await batch.commit();
 }
 
 // ==========================================
-// 5. SITE SETTINGS CMS
+// 2. TV & ANIME SERIES (REALTIME & CRUD)
 // ==========================================
 
-export async function getSiteSettingsFromFirestore(): Promise<SiteSettings> {
+export function subscribeSeries(callback: (series: SeriesItem[]) => void) {
+  const colRef = collection(db, COLLECTIONS.SERIES);
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as SeriesItem));
+      callback(items);
+    },
+    (err) => {
+      console.warn('[Firestore] subscribeSeries error:', err);
+    }
+  );
+}
+
+export async function getSeries(): Promise<SeriesItem[]> {
+  try {
+    const snap = await getDocs(collection(db, COLLECTIONS.SERIES));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as SeriesItem));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, COLLECTIONS.SERIES);
+    return [];
+  }
+}
+
+export async function getSeriesBySlugOrId(identifier: string): Promise<SeriesItem | null> {
+  try {
+    const docRef = doc(db, COLLECTIONS.SERIES, identifier);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return { id: snap.id, ...snap.data() } as SeriesItem;
+    }
+    const q = query(collection(db, COLLECTIONS.SERIES), where('slug', '==', identifier), limit(1));
+    const slugSnap = await getDocs(q);
+    if (!slugSnap.empty) {
+      const d = slugSnap.docs[0];
+      return { id: d.id, ...d.data() } as SeriesItem;
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, `${COLLECTIONS.SERIES}/${identifier}`);
+    return null;
+  }
+}
+
+export async function saveSeries(series: SeriesItem): Promise<void> {
+  const id = series.id || `tv_${Date.now()}`;
+  const slug = series.slug || series.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  const data: SeriesItem = {
+    ...series,
+    id,
+    slug,
+    mediaType: series.mediaType || 'tv',
+    isPublished: series.isPublished !== undefined ? series.isPublished : true,
+    updatedAt: new Date().toISOString(),
+    createdAt: series.createdAt || new Date().toISOString()
+  };
+
+  try {
+    await setDoc(doc(db, COLLECTIONS.SERIES, id), data, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.SERIES}/${id}`);
+  }
+}
+
+export async function deleteSeries(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, COLLECTIONS.SERIES, id));
+    // Also delete any associated episodes
+    const epsQuery = query(collection(db, COLLECTIONS.EPISODES), where('seriesId', '==', id));
+    const epsSnap = await getDocs(epsQuery);
+    const batch = writeBatch(db);
+    epsSnap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${COLLECTIONS.SERIES}/${id}`);
+  }
+}
+
+// ==========================================
+// 3. EPISODES (CRUD)
+// ==========================================
+
+export async function getEpisodesBySeries(seriesId: string, seasonNumber?: number): Promise<EpisodeItem[]> {
+  try {
+    let q = query(collection(db, COLLECTIONS.EPISODES), where('seriesId', '==', seriesId));
+    if (seasonNumber !== undefined) {
+      q = query(collection(db, COLLECTIONS.EPISODES), where('seriesId', '==', seriesId), where('seasonNumber', '==', seasonNumber));
+    }
+    const snap = await getDocs(q);
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as EpisodeItem));
+    return items.sort((a, b) => a.episodeNumber - b.episodeNumber);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, `${COLLECTIONS.EPISODES}?seriesId=${seriesId}`);
+    return [];
+  }
+}
+
+export async function saveEpisode(episode: EpisodeItem): Promise<void> {
+  const id = episode.id || `ep_${Date.now()}`;
+  const data: EpisodeItem = {
+    ...episode,
+    id,
+    isPublished: episode.isPublished !== undefined ? episode.isPublished : true,
+    updatedAt: new Date().toISOString(),
+    createdAt: episode.createdAt || new Date().toISOString()
+  };
+
+  try {
+    await setDoc(doc(db, COLLECTIONS.EPISODES, id), data, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.EPISODES}/${id}`);
+  }
+}
+
+export async function deleteEpisode(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, COLLECTIONS.EPISODES, id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${COLLECTIONS.EPISODES}/${id}`);
+  }
+}
+
+// ==========================================
+// 4. HOMEPAGE RAILS CMS
+// ==========================================
+
+export function subscribeHomepageSections(callback: (sections: HomepageSectionConfig[]) => void) {
+  const colRef = collection(db, COLLECTIONS.HOMEPAGE);
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as HomepageSectionConfig));
+      callback(items.sort((a, b) => a.order - b.order));
+    },
+    (err) => {
+      console.warn('[Firestore] subscribeHomepageSections error:', err);
+    }
+  );
+}
+
+export async function getHomepageSections(): Promise<HomepageSectionConfig[]> {
+  try {
+    const snap = await getDocs(collection(db, COLLECTIONS.HOMEPAGE));
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as HomepageSectionConfig));
+    return items.sort((a, b) => a.order - b.order);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, COLLECTIONS.HOMEPAGE);
+    return [];
+  }
+}
+
+export async function saveHomepageSection(section: HomepageSectionConfig): Promise<void> {
+  const id = section.id || `sec_${Date.now()}`;
+  try {
+    await setDoc(doc(db, COLLECTIONS.HOMEPAGE, id), { ...section, id }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.HOMEPAGE}/${id}`);
+  }
+}
+
+export async function deleteHomepageSection(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, COLLECTIONS.HOMEPAGE, id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${COLLECTIONS.HOMEPAGE}/${id}`);
+  }
+}
+
+// ==========================================
+// 5. SITE SETTINGS
+// ==========================================
+
+export async function getSiteSettings(): Promise<SiteSettings> {
   try {
     const docRef = doc(db, COLLECTIONS.SETTINGS, 'global_config');
     const snap = await getDoc(docRef);
     if (snap.exists()) {
-      return snap.data() as SiteSettings;
+      return { ...DEFAULT_SITE_SETTINGS, ...snap.data() } as SiteSettings;
     }
-  } catch (e) {
-    console.warn('[CINEXUS Firestore] Error fetching settings:', e);
+    return DEFAULT_SITE_SETTINGS;
+  } catch (error) {
+    console.warn('[Firestore] getSiteSettings default fallback:', error);
+    return DEFAULT_SITE_SETTINGS;
   }
-  return DEFAULT_SITE_SETTINGS;
 }
 
-export async function saveSiteSettingsToFirestore(settings: SiteSettings): Promise<void> {
-  const docRef = doc(db, COLLECTIONS.SETTINGS, 'global_config');
-  await setDoc(docRef, settings, { merge: true });
-}
-
-// ==========================================
-// 6. AUDIT LOGGING
-// ==========================================
-
-export async function logAdminAction(action: string, entity: string, entityId: string, details?: string, email?: string): Promise<void> {
+export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
   try {
-    const logId = `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const logRef = doc(db, COLLECTIONS.AUDIT, logId);
-    const logData: AuditLog = {
-      id: logId,
-      adminEmail: email || 'kushanashvika216@gmail.com',
+    await setDoc(doc(db, COLLECTIONS.SETTINGS, 'global_config'), settings, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.SETTINGS}/global_config`);
+  }
+}
+
+// ==========================================
+// 6. WATCHLIST & WATCH PROGRESS
+// ==========================================
+
+export async function getUserWatchlist(userId: string): Promise<string[]> {
+  try {
+    const colRef = collection(db, `${COLLECTIONS.USERS}/${userId}/watchlist`);
+    const snap = await getDocs(colRef);
+    return snap.docs.map((d) => d.id);
+  } catch (error) {
+    return [];
+  }
+}
+
+export async function addToWatchlist(userId: string, movie: MovieItem): Promise<void> {
+  try {
+    const docRef = doc(db, `${COLLECTIONS.USERS}/${userId}/watchlist`, movie.id);
+    await setDoc(docRef, {
+      id: movie.id,
+      title: movie.title,
+      posterPath: movie.posterPath,
+      mediaType: movie.mediaType,
+      addedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `users/${userId}/watchlist/${movie.id}`);
+  }
+}
+
+export async function removeFromWatchlist(userId: string, movieId: string): Promise<void> {
+  try {
+    const docRef = doc(db, `${COLLECTIONS.USERS}/${userId}/watchlist`, movieId);
+    await deleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `users/${userId}/watchlist/${movieId}`);
+  }
+}
+
+export async function saveWatchProgress(userId: string, progress: WatchProgress): Promise<void> {
+  const contentKey = progress.episodeId ? `${progress.contentId}_${progress.episodeId}` : progress.contentId;
+  try {
+    const docRef = doc(db, `${COLLECTIONS.USERS}/${userId}/history`, contentKey);
+    await setDoc(docRef, {
+      ...progress,
+      userId,
+      lastWatchedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    console.warn('[Firestore] Watch progress save warning:', error);
+  }
+}
+
+export async function getUserWatchProgress(userId: string): Promise<Record<string, WatchProgress>> {
+  try {
+    const colRef = collection(db, `${COLLECTIONS.USERS}/${userId}/history`);
+    const snap = await getDocs(colRef);
+    const map: Record<string, WatchProgress> = {};
+    snap.docs.forEach((d) => {
+      map[d.id] = d.data() as WatchProgress;
+    });
+    return map;
+  } catch (error) {
+    return {};
+  }
+}
+
+// ==========================================
+// 7. AUDIT LOGGING
+// ==========================================
+
+export async function logAdminAction(
+  adminEmail: string,
+  action: string,
+  entity: string,
+  entityId: string,
+  details?: string
+): Promise<void> {
+  try {
+    const logDoc: Omit<AuditLog, 'id'> = {
+      adminEmail,
       action,
       entity,
       entityId,
       timestamp: new Date().toISOString(),
       details: details || ''
     };
-    await setDoc(logRef, logData);
-  } catch (e) {
-    console.warn('[CINEXUS Firestore] Audit log error:', e);
+    await setDoc(doc(collection(db, COLLECTIONS.AUDIT_LOGS)), logDoc);
+  } catch (err) {
+    console.warn('[Audit Log] Failed to write audit record:', err);
   }
 }
 
-export async function getAuditLogsFromFirestore(): Promise<AuditLog[]> {
+export async function getAuditLogs(max: number = 50): Promise<AuditLog[]> {
   try {
-    const auditRef = collection(db, COLLECTIONS.AUDIT);
-    const q = query(auditRef, orderBy('timestamp', 'desc'), limit(50));
+    const q = query(collection(db, COLLECTIONS.AUDIT_LOGS), orderBy('timestamp', 'desc'), limit(max));
     const snap = await getDocs(q);
-    if (!snap.empty) {
-      return snap.docs.map(d => d.data() as AuditLog);
-    }
-  } catch (e) {
-    console.warn('[CINEXUS Firestore] Error fetching audit logs:', e);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditLog));
+  } catch (error) {
+    return [];
   }
-  return [];
 }
 
 // ==========================================
-// 7. USER WATCHLIST & HISTORY PERSISTENCE
+// 8. REVIEWS
 // ==========================================
 
-export async function getUserWatchlistFromFirestore(userId: string): Promise<string[]> {
+export async function getReviews(contentId: string): Promise<UserReview[]> {
   try {
-    const docRef = doc(db, COLLECTIONS.WATCHLISTS, userId);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      return snap.data()?.items || [];
-    }
-  } catch (e) {
-    console.warn('[CINEXUS Firestore] Error fetching watchlist:', e);
+    const q = query(
+      collection(db, COLLECTIONS.REVIEWS),
+      where('contentId', '==', contentId),
+      where('status', '==', 'approved')
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as UserReview));
+  } catch (error) {
+    return [];
   }
-  const local = localStorage.getItem(`cinexus_watchlist_${userId}`);
-  return local ? JSON.parse(local) : [];
 }
 
-export async function toggleUserWatchlistInFirestore(userId: string, contentId: string): Promise<string[]> {
-  const current = await getUserWatchlistFromFirestore(userId);
-  const updated = current.includes(contentId)
-    ? current.filter(id => id !== contentId)
-    : [...current, contentId];
-
+export async function addReview(review: Omit<UserReview, 'id' | 'createdAt'>): Promise<void> {
+  const id = `rev_${Date.now()}`;
   try {
-    const docRef = doc(db, COLLECTIONS.WATCHLISTS, userId);
-    await setDoc(docRef, { items: updated, updatedAt: new Date().toISOString() }, { merge: true });
-  } catch (e) {
-    console.warn('[CINEXUS Firestore] Error saving watchlist:', e);
+    await setDoc(doc(db, COLLECTIONS.REVIEWS, id), {
+      ...review,
+      id,
+      createdAt: new Date().toISOString()
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.REVIEWS}/${id}`);
   }
-
-  localStorage.setItem(`cinexus_watchlist_${userId}`, JSON.stringify(updated));
-  return updated;
-}
-
-export async function getUserWatchHistoryFromFirestore(userId: string): Promise<Record<string, WatchProgress>> {
-  try {
-    const docRef = doc(db, COLLECTIONS.HISTORY, userId);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      return snap.data()?.progress || {};
-    }
-  } catch (e) {
-    console.warn('[CINEXUS Firestore] Error fetching history:', e);
-  }
-  const local = localStorage.getItem(`cinexus_history_${userId}`);
-  return local ? JSON.parse(local) : {};
-}
-
-export async function saveUserWatchProgressToFirestore(userId: string, progress: WatchProgress): Promise<void> {
-  const key = progress.movieId || progress.contentId || 'unknown';
-  const history = await getUserWatchHistoryFromFirestore(userId);
-  history[key] = {
-    ...progress,
-    lastWatchedAt: new Date().toISOString()
-  };
-
-  try {
-    const docRef = doc(db, COLLECTIONS.HISTORY, userId);
-    await setDoc(docRef, { progress: history, updatedAt: new Date().toISOString() }, { merge: true });
-  } catch (e) {
-    console.warn('[CINEXUS Firestore] Error saving history:', e);
-  }
-
-  localStorage.setItem(`cinexus_history_${userId}`, JSON.stringify(history));
 }
 
 // ==========================================
-// 8. REALTIME SUBSCRIBERS
+// 9. ADMIN INITIALIZATION & ROLE CHECK
 // ==========================================
 
-export function subscribeToMovies(callback: (movies: MovieItem[]) => void): () => void {
-  const moviesRef = collection(db, COLLECTIONS.MOVIES);
-  return onSnapshot(moviesRef, (snap) => {
-    if (!snap.empty) {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as MovieItem));
-      callback(list);
-    }
-  }, (err) => {
-    console.warn('[CINEXUS Firestore] Realtime movies error:', err);
-  });
-}
-
-export function subscribeToSettings(callback: (settings: SiteSettings) => void): () => void {
-  const docRef = doc(db, COLLECTIONS.SETTINGS, 'global_config');
-  return onSnapshot(docRef, (snap) => {
-    if (snap.exists()) {
-      callback(snap.data() as SiteSettings);
-    }
-  }, (err) => {
-    console.warn('[CINEXUS Firestore] Realtime settings error:', err);
-  });
+export async function checkIsAdmin(uid: string, email: string): Promise<boolean> {
+  if (email === 'kushanashvika216@gmail.com') {
+    // Ensure admin document exists in admins collection
+    try {
+      await setDoc(doc(db, COLLECTIONS.ADMINS, uid), {
+        email,
+        role: 'SUPER_ADMIN',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch {}
+    return true;
+  }
+  try {
+    const adminDoc = await getDoc(doc(db, COLLECTIONS.ADMINS, uid));
+    return adminDoc.exists();
+  } catch {
+    return false;
+  }
 }

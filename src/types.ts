@@ -1,7 +1,8 @@
-export type MediaType = 'movie' | 'tv' | 'collection' | 'person' | 'anime' | 'documentary' | 'all';
-export type QualityBadge = '4K Ultra HD' | 'IMAX Enhanced' | 'Dolby Vision' | '1080p FHD' | 'HDR10+';
-export type QualityTier = 'all' | '4K Ultra HD' | 'IMAX Enhanced' | 'Dolby Vision' | '1080p FHD' | 'HDR10+';
+export type MediaType = 'movie' | 'tv' | 'anime' | 'documentary' | 'all';
+export type QualityBadge = '4K Ultra HD' | 'IMAX Enhanced' | 'Dolby Vision' | '1080p FHD' | 'HDR10+' | '720p HD' | 'Auto';
+export type QualityTier = QualityBadge;
 export type ContentRating = 'G' | 'PG' | 'PG-13' | 'R' | 'NC-17' | 'TV-MA' | 'TV-14' | 'TV-PG' | 'All Ages';
+export type ContentStatus = 'published' | 'draft' | 'archived' | 'private';
 export type UserRole = 'USER' | 'EDITOR' | 'ADMIN' | 'SUPER_ADMIN';
 
 export interface CastMember {
@@ -24,20 +25,27 @@ export interface CrewMember {
 
 export interface VideoSource {
   id: string;
+  contentId?: string;
+  episodeId?: string;
   title: string;
   name?: string;
   url: string;
-  type: 'hls' | 'mp4' | 'iframe' | 'embed' | 'cdn' | 'youtube';
-  quality: '4K' | '1080p' | '720p' | '480p' | 'Auto' | string;
+  type: 'hls' | 'mp4' | 'dash' | 'iframe' | 'embed' | 'cdn' | 'youtube';
+  quality: QualityBadge | string;
   priority?: number;
   isDefault?: boolean;
   enabled?: boolean;
+  language?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ServerEmbeds {
   streamhg?: string;
   ernvids?: string;
   filemoon?: string;
+  custom1?: string;
+  custom2?: string;
 }
 
 export interface SubtitleTrack {
@@ -52,32 +60,37 @@ export interface AudioTrack {
   id: string;
   label: string;
   language: string;
-  format: 'Dolby Atmos' | 'DTS 5.1' | 'Dolby 5.1' | 'Stereo' | 'Director Commentary';
+  format?: 'Dolby Atmos' | 'DTS 5.1' | 'Dolby 5.1' | 'Stereo' | 'Director Commentary';
   isDefault?: boolean;
 }
 
 export interface EpisodeItem {
   id: string;
-  episodeNumber: number;
+  seriesId?: string;
   seasonNumber?: number;
   season?: number;
+  episodeNumber: number;
   title: string;
   overview?: string;
-  airDate?: string;
-  runtime?: number | string; // in minutes
-  duration?: string;
   stillPath?: string | null;
   thumbnailUrl?: string;
+  runtime?: number | string;
+  airDate?: string;
   videoUrl?: string;
-  voteAverage?: number;
   sources?: VideoSource[];
+  servers?: ServerEmbeds;
   subtitles?: SubtitleTrack[];
+  isPublished?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SeasonItem {
   id: string;
+  seriesId: string;
   seasonNumber: number;
-  name: string;
+  name?: string;
+  title?: string;
   overview?: string;
   posterPath?: string | null;
   airDate?: string;
@@ -99,14 +112,9 @@ export interface TechSpecsData {
   boxOffice?: string;
 }
 
-export interface SoundtrackItem {
-  title: string;
-  artist: string;
-  duration: string;
-}
-
 export interface MovieItem {
   id: string;
+  slug?: string;
   tmdbId?: number;
   title: string;
   originalTitle?: string;
@@ -117,28 +125,24 @@ export interface MovieItem {
   posterUrl?: string;
   backdropPath?: string | null;
   backdropUrl?: string;
+  logoUrl?: string;
   releaseDate?: string;
   releaseYear: number;
-  runtime?: number; // minutes for movie
+  runtime?: number | string; // minutes or formatted
   duration?: string;
-  episodeRuntime?: number[];
-  numberOfSeasons?: number;
-  numberOfEpisodes?: number;
-  slug?: string;
-  isPublished?: boolean;
+  rottenTomatoesScore?: number;
   genres: string[];
   genreIds?: number[];
   rating: number; // 0 to 10
   voteCount?: number;
   votesCount?: string;
-  rottenTomatoesScore?: number;
-  popularity?: number;
   contentRating: ContentRating;
   quality: QualityBadge | string;
   languages?: string[];
   originalLanguage?: string;
   countries?: string[];
-  status?: string; // 'Released' | 'In Production' | 'Returning Series' | 'Ended'
+  status?: ContentStatus | string;
+  isPublished?: boolean;
   isFeatured?: boolean;
   isFeaturedHero?: boolean;
   isTrending?: boolean;
@@ -159,107 +163,49 @@ export interface MovieItem {
   cast?: CastMember[];
   crew?: CrewMember[];
   keywords?: string[];
-  officialWebsite?: string;
   galleryImages?: string[];
+  tags?: string[];
   sources?: VideoSource[];
+  servers?: ServerEmbeds;
   subtitles?: SubtitleTrack[];
   audioTracks?: AudioTrack[];
-  /** Authorized, admin-configured provider embeds. Never inferred from a TMDB id. */
-  servers?: ServerEmbeds;
   seasons?: SeasonItem[];
   episodes?: EpisodeItem[];
   techSpecs?: TechSpecsData;
   trivia?: string[];
-  soundtracks?: SoundtrackItem[];
+  soundtracks?: { title: string; artist: string; duration?: string; album?: string; year?: number }[];
   reviews?: UserReview[];
-  collectionId?: string;
-  collectionName?: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export interface CollectionItem {
+export interface SeriesItem extends MovieItem {
+  mediaType: 'tv' | 'anime';
+  numberOfSeasons?: number;
+  numberOfEpisodes?: number;
+  seasonsCount?: number;
+  episodesCount?: number;
+  episodeRuntime?: number[];
+}
+
+export interface HeroSlide {
   id: string;
-  tmdbId?: number;
-  name: string;
+  contentId: string;
+  title: string;
+  subtitle?: string;
+  tagline?: string;
   overview: string;
-  posterPath: string | null;
-  backdropPath: string | null;
-  parts: MovieItem[];
-  genre?: string;
-}
-
-export interface UserReview {
-  id: string;
-  contentId?: string;
-  contentType?: 'movie' | 'tv';
-  userId?: string;
-  userName?: string;
-  userAvatar?: string;
-  author?: string;
-  avatar?: string;
-  rating: number;
-  comment: string;
-  createdAt?: string;
-  date?: string;
-  verifiedWatch?: boolean;
-  isFlagged?: boolean;
-  isApproved?: boolean;
-}
-
-export interface UserProfile {
-  id: string;
-  email: string;
-  name: string;
-  avatarUrl: string;
-  role: UserRole;
-  createdAt: string;
-  preferences?: {
-    defaultQuality: '4K' | '1080p' | 'Auto';
-    defaultSubtitleLang: string;
-    autoplayNext: boolean;
-  };
-}
-
-export interface WatchProgress {
-  movieId?: string;
-  contentId?: string;
-  contentType?: 'movie' | 'tv';
-  title?: string;
-  posterPath?: string | null;
-  backdropPath?: string | null;
-  seasonNumber?: number;
-  episodeNumber?: number;
-  episodeTitle?: string;
-  currentTime: number;
-  duration: number;
-  percentage: number;
-  lastWatchedAt: string;
-}
-
-export interface FilterOptions {
-  searchQuery: string;
-  mediaType: 'all' | 'movie' | 'tv';
-  genre: string;
-  year?: number | 'all';
-  minYear?: number;
-  maxYear?: number;
-  minRating: number;
-  language?: string;
-  country?: string;
-  quality: string;
-  sortBy: string;
-  page?: number;
-}
-
-export interface WatchPartyMessage {
-  id: string;
-  user: string;
-  avatar: string;
-  text: string;
-  time?: string;
-  timestamp?: string;
-  isHost?: boolean;
+  backdropPath: string;
+  posterPath?: string;
+  logoUrl?: string;
+  mediaType: 'movie' | 'tv' | 'anime';
+  rating?: number;
+  releaseYear?: number;
+  runtime?: string;
+  genres?: string[];
+  qualityBadge?: string;
+  enabled: boolean;
+  order: number;
 }
 
 export interface HomepageSectionConfig {
@@ -274,11 +220,128 @@ export interface HomepageSectionConfig {
   order: number;
   itemLimit?: number;
   limit?: number;
-  contentSource?: string;
+  contentSource?: 'trending' | 'latest' | 'top_rated' | 'genre' | 'featured' | 'custom';
   badge?: string;
   filterGenre?: string;
   filterQuality?: string;
+  contentIds?: string[];
   items?: MovieItem[];
+}
+
+export interface UserReview {
+  id: string;
+  contentId?: string;
+  contentType?: 'movie' | 'tv';
+  userId?: string;
+  userName?: string;
+  userAvatar?: string;
+  author?: string;
+  avatar?: string;
+  date?: string;
+  rating: number;
+  comment: string;
+  status?: 'pending' | 'approved' | 'rejected';
+  verifiedWatch?: boolean;
+  createdAt?: string;
+}
+
+export interface WatchPartyMessage {
+  id: string;
+  user: string;
+  avatar: string;
+  text: string;
+  timestamp: string;
+  isHost?: boolean;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl?: string;
+  role: UserRole;
+  createdAt: string;
+  preferences?: {
+    defaultQuality: '4K' | '1080p' | 'Auto';
+    defaultSubtitleLang: string;
+    autoplayNext: boolean;
+  };
+}
+
+export interface WatchProgress {
+  movieId?: string;
+  contentId: string;
+  episodeId?: string;
+  seriesId?: string;
+  contentType?: 'movie' | 'tv';
+  title: string;
+  posterPath?: string | null;
+  backdropPath?: string | null;
+  seasonNumber?: number;
+  episodeNumber?: number;
+  episodeTitle?: string;
+  currentTime: number;
+  duration: number;
+  percentage: number;
+  lastWatchedAt: string;
+}
+
+export interface FilterOptions {
+  searchQuery: string;
+  mediaType: 'all' | 'movie' | 'tv' | 'anime';
+  genre: string;
+  year?: number | 'all';
+  minYear?: number;
+  maxYear?: number;
+  minRating: number;
+  quality: string;
+  sortBy: string;
+  page?: number;
+}
+
+export interface SiteSettings {
+  siteName: string;
+  siteTagline: string;
+  siteDescription: string;
+  logoUrl?: string;
+  badgeUrl?: string;
+  watermarkEnabled: boolean;
+  watermarkOpacity: number;
+  watermarkPosition: 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left';
+  maintenanceMode: boolean;
+  defaultQuality: string;
+  allowUserRegistrations: boolean;
+  providers?: VideoProvider[];
+}
+
+export interface VideoProvider {
+  id: string;
+  name: string;
+  domain: string;
+  enabled: boolean;
+  notes?: string;
+}
+
+export interface MediaFile {
+  id: string;
+  name: string;
+  url: string;
+  storagePath: string;
+  size: number;
+  contentType: string;
+  category: 'poster' | 'backdrop' | 'video' | 'subtitle' | 'logo' | 'other';
+  createdAt: string;
+}
+
+export interface AuditLog {
+  id: string;
+  adminEmail: string;
+  action: string;
+  entity: string;
+  entityId: string;
+  timestamp: string;
+  ip?: string;
+  details?: string;
 }
 
 export interface AdminStats {
@@ -311,7 +374,7 @@ export interface VideoEmbed {
   src: string;
   originalWidth?: number;
   originalHeight?: number;
-  aspectRatio: number; // e.g. 1.777 (16:9) or width/height
+  aspectRatio: number;
   allowFullscreen: boolean;
   allow?: string;
   providerName?: string;
@@ -320,38 +383,4 @@ export interface VideoEmbed {
   status: 'active' | 'inactive' | 'error';
   createdAt?: string;
   updatedAt?: string;
-}
-
-export interface VideoProvider {
-  id: string;
-  name: string;
-  domain: string;
-  enabled: boolean;
-  notes?: string;
-}
-
-export interface SiteSettings {
-  siteName: string;
-  siteTagline: string;
-  siteDescription: string;
-  logoUrl?: string;
-  badgeUrl?: string;
-  watermarkEnabled: boolean;
-  watermarkOpacity: number;
-  watermarkPosition: 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left';
-  maintenanceMode: boolean;
-  defaultQuality: string;
-  allowUserRegistrations: boolean;
-  providers?: VideoProvider[];
-}
-
-export interface AuditLog {
-  id: string;
-  adminEmail: string;
-  action: string;
-  entity: string;
-  entityId: string;
-  timestamp: string;
-  ip?: string;
-  details?: string;
 }

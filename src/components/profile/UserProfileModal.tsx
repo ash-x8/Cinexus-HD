@@ -302,7 +302,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     type="button"
                     onClick={() => {
                       setEditName(user.name);
-                      setEditAvatar(user.avatarUrl);
+                      setEditAvatar(user.avatarUrl || PRESET_AVATARS[0]);
                       setIsEditing(true);
                     }}
                     className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-semibold transition-all cursor-pointer"

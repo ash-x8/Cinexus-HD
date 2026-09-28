@@ -9,7 +9,8 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && (
         request.auth.token.email == 'kushanashvika216@gmail.com' ||
-        request.auth.token.admin == true
+        request.auth.token.admin == true ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
 
@@ -17,7 +18,13 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Public Movies Catalog: Anyone can read, only admin can create/edit/delete
+    // Admins registry
+    match /admins/{adminId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Public Movies Catalog: Anyone can read, only admin can write
     match /movies/{movieId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -47,6 +54,24 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Streaming Sources
+    match /streamSources/{sourceId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Media library records
+    match /media/{mediaId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Collections
+    match /collections/{collectionId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // User Watchlists & History
     match /users/{userId} {
       allow read, write: if isOwner(userId) || isAdmin();
@@ -60,12 +85,23 @@ service cloud.firestore {
       }
     }
 
+    match /watchHistory/{historyId} {
+      allow read, write: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || request.resource.data.userId == request.auth.uid) || isAdmin();
+    }
+
+    // Reviews: Anyone can read approved reviews, users can create, admins can moderate
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+
     // Audit Logs: Admin only
     match /auditLogs/{logId} {
       allow read, write: if isAdmin();
     }
 
-    // Fallback rule
+    // Default catch-all
     match /{document=**} {
       allow read, write: if isAdmin();
     }

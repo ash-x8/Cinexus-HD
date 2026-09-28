@@ -34,7 +34,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           currentEpisode={currentEpisode}
           allEpisodes={movie.episodes || []}
           initialTime={initialTime}
-          onTimeUpdate={(time, dur) => {
+          onTimeUpdate={(time: number, dur: number) => {
             lastTime = time;
             lastDuration = dur;
           }}

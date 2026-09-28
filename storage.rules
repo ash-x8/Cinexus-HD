@@ -1,0 +1,46 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'kushanashvika216@gmail.com' ||
+        request.auth.token.admin == true
+      );
+    }
+
+    // Media library: Public read, admin write/delete
+    match /media/{allPaths=**} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
+
+    // Posters & Backdrops
+    match /posters/{allPaths=**} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
+
+    // Video streams
+    match /videos/{allPaths=**} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
+
+    // User profile avatars
+    match /avatars/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Default fallback
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write, delete: if isAdmin();
+    }
+  }
+}
