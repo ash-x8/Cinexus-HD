@@ -13,8 +13,8 @@ export const BRANDING = {
   legalNotice: 'CINEXUS Entertainment. All streams and embeds require verified distribution authorization.',
   
   // Official Brand Assets
-  logoUrl: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_000000008aa48211972e3a8c2b195dbe.png',
-  faviconUrl: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_000000008aa48211972e3a8c2b195dbe.png',
+  logoUrl: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_00000000a72882119fa9566af8cf7b28.png',
+  faviconUrl: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_00000000a72882119fa9566af8cf7b28.png',
   
   // Theme Color System
   colors: {

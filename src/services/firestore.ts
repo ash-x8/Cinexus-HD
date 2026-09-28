@@ -86,8 +86,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   siteName: 'CINEXUS',
   siteTagline: 'STREAM. WATCH. EXPERIENCE.',
   siteDescription: 'Next-generation ultra cinema platform with master 4K streaming feeds.',
-  logoUrl: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_000000008aa48211972e3a8c2b195dbe.png',
-  faviconUrl: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_000000008aa48211972e3a8c2b195dbe.png',
+  logoUrl: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_00000000a72882119fa9566af8cf7b28.png',
+  faviconUrl: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_00000000a72882119fa9566af8cf7b28.png',
   watermarkEnabled: true,
   watermarkOpacity: 0.7,
   watermarkPosition: 'top-right',
@@ -181,6 +181,53 @@ export async function bulkDeleteMovies(ids: string[]): Promise<void> {
     batch.delete(doc(db, COLLECTIONS.MOVIES, id));
   });
   await batch.commit();
+}
+
+export async function bulkSaveMovies(
+  movies: MovieItem[],
+  onProgress?: (processed: number, total: number) => void
+): Promise<{ success: number; failed: number }> {
+  const CHUNK_SIZE = 400; // Respect Firestore 500 operations batch limit
+  let success = 0;
+  let failed = 0;
+
+  for (let i = 0; i < movies.length; i += CHUNK_SIZE) {
+    const chunk = movies.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+
+    chunk.forEach((movie) => {
+      const id = movie.id || `mov_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const slug = movie.slug || (movie.title || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const ref = doc(db, COLLECTIONS.MOVIES, id);
+      batch.set(
+        ref,
+        {
+          ...movie,
+          id,
+          slug,
+          mediaType: 'movie',
+          isPublished: movie.isPublished !== undefined ? movie.isPublished : true,
+          updatedAt: new Date().toISOString(),
+          createdAt: movie.createdAt || new Date().toISOString()
+        },
+        { merge: true }
+      );
+    });
+
+    try {
+      await batch.commit();
+      success += chunk.length;
+    } catch (err) {
+      console.error('[bulkSaveMovies] Batch commit error:', err);
+      failed += chunk.length;
+    }
+
+    if (onProgress) {
+      onProgress(Math.min(i + chunk.length, movies.length), movies.length);
+    }
+  }
+
+  return { success, failed };
 }
 
 // ==========================================

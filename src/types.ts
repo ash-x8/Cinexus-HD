@@ -116,6 +116,7 @@ export interface MovieItem {
   id: string;
   slug?: string;
   tmdbId?: number;
+  imdbId?: string;
   title: string;
   originalTitle?: string;
   tagline?: string;

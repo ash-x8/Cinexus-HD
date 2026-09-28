@@ -15,6 +15,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { UserProfile, UserRole } from '../types';
 import { checkIsAdmin, COLLECTIONS } from '../services/firestore';
 import { uploadUserProfilePhoto } from '../services/storage';
+import { getFriendlyAuthErrorMessage } from '../services/authErrors';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -32,6 +33,7 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<UserProfile>;
   sendPasswordReset: (email: string) => Promise<void>;
   adminLogin: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
+  adminLoginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
   uploadAvatar: (file: File) => Promise<string>;
@@ -115,57 +117,76 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const loginWithEmail = async (email: string, pass: string): Promise<UserProfile> => {
-    const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
-    await syncUserData(cred.user);
-    return {
-      id: cred.user.uid,
-      email: cred.user.email || '',
-      name: cred.user.displayName || 'Cinema Fan',
-      role: 'USER',
-      createdAt: new Date().toISOString()
-    };
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
+      await syncUserData(cred.user);
+      return {
+        id: cred.user.uid,
+        email: cred.user.email || '',
+        name: cred.user.displayName || 'Cinema Fan',
+        role: 'USER',
+        createdAt: new Date().toISOString()
+      };
+    } catch (err: any) {
+      throw new Error(getFriendlyAuthErrorMessage(err));
+    }
   };
 
   const signupWithEmail = async (email: string, pass: string, name: string): Promise<UserProfile> => {
-    const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
-    if (name.trim()) {
-      await updateProfile(cred.user, { displayName: name.trim() });
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+      if (name.trim()) {
+        try {
+          await updateProfile(cred.user, { displayName: name.trim() });
+        } catch {}
+      }
+      const profile: UserProfile = {
+        id: cred.user.uid,
+        email: cred.user.email || '',
+        name: name.trim() || 'Cinema Fan',
+        role: 'USER',
+        createdAt: new Date().toISOString()
+      };
+      try {
+        await setDoc(doc(db, COLLECTIONS.USERS, cred.user.uid), profile);
+      } catch {}
+      await syncUserData(cred.user);
+      return profile;
+    } catch (err: any) {
+      throw new Error(getFriendlyAuthErrorMessage(err));
     }
-    const profile: UserProfile = {
-      id: cred.user.uid,
-      email: cred.user.email || '',
-      name: name.trim() || 'Cinema Fan',
-      role: 'USER',
-      createdAt: new Date().toISOString()
-    };
-    await setDoc(doc(db, COLLECTIONS.USERS, cred.user.uid), profile);
-    await syncUserData(cred.user);
-    return profile;
   };
 
   const loginWithGoogle = async (): Promise<UserProfile> => {
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({
-      client_id: '1034803141860-6216717n36tf103ucti42jjicpaftkkk.apps.googleusercontent.com',
-      prompt: 'select_account'
-    });
-    const cred = await signInWithPopup(auth, provider);
-    await syncUserData(cred.user);
-    return {
-      id: cred.user.uid,
-      email: cred.user.email || '',
-      name: cred.user.displayName || 'Cinema Fan',
-      role: 'USER',
-      avatarUrl: cred.user.photoURL || undefined,
-      createdAt: new Date().toISOString()
-    };
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
+      const cred = await signInWithPopup(auth, provider);
+      await syncUserData(cred.user);
+      return {
+        id: cred.user.uid,
+        email: cred.user.email || '',
+        name: cred.user.displayName || 'Cinema Fan',
+        role: 'USER',
+        avatarUrl: cred.user.photoURL || undefined,
+        createdAt: new Date().toISOString()
+      };
+    } catch (err: any) {
+      throw new Error(getFriendlyAuthErrorMessage(err));
+    }
   };
 
   const sendPasswordReset = async (email: string): Promise<void> => {
-    await sendPasswordResetEmail(auth, email.trim());
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+    } catch (err: any) {
+      throw new Error(getFriendlyAuthErrorMessage(err));
+    }
   };
 
-  // Dedicated Admin Login at /admin
+  // Dedicated Admin Login at /admin via Email/Password
   const adminLogin = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
     const cleanEmail = email.trim();
     try {
@@ -178,7 +199,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           try {
             cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
           } catch (createErr: any) {
-            throw new Error(createErr.message || 'Failed to authenticate administrator account.');
+            throw new Error(getFriendlyAuthErrorMessage(createErr));
           }
         } else {
           throw signInErr;
@@ -194,7 +215,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await syncUserData(cred.user);
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message || 'Authentication failed. Please verify credentials.' };
+      return { success: false, error: getFriendlyAuthErrorMessage(err) };
+    }
+  };
+
+  // Dedicated Admin Login at /admin via Google OAuth
+  const adminLoginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
+      const cred = await signInWithPopup(auth, provider);
+      const isAdm = await checkIsAdmin(cred.user.uid, cred.user.email || '');
+      if (!isAdm) {
+        await signOut(auth);
+        return {
+          success: false,
+          error: `Access Denied: Account (${cred.user.email}) does not have Studio Administrator clearance.`
+        };
+      }
+
+      await syncUserData(cred.user);
+      return { success: true };
+    } catch (err: any) {
+      console.error('[Admin Google Login error]:', err);
+      return { success: false, error: getFriendlyAuthErrorMessage(err) };
     }
   };
 
@@ -271,6 +317,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         loginWithGoogle,
         sendPasswordReset,
         adminLogin,
+        adminLoginWithGoogle,
         logout,
         updateProfile: updateUserProfile,
         uploadAvatar,

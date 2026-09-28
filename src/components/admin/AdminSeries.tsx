@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Tv, Film, Save, ListPlus, Radio } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Tv, Film, Save, ListPlus, Radio, Sparkles, Loader2, Check, AlertTriangle } from 'lucide-react';
 import { getSeries, saveSeries, deleteSeries, getEpisodesBySeries, saveEpisode, deleteEpisode, logAdminAction } from '../../services/firestore';
+import { tmdbService } from '../../services/tmdb';
 import { SeriesItem, EpisodeItem } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 
@@ -13,6 +14,9 @@ export const AdminSeries: React.FC = () => {
   // Series Editor Modal
   const [isSeriesModalOpen, setIsSeriesModalOpen] = useState(false);
   const [editingSeries, setEditingSeries] = useState<Partial<SeriesItem> | null>(null);
+  const [tmdbSeriesQuery, setTmdbSeriesQuery] = useState('');
+  const [isFetchingTmdb, setIsFetchingTmdb] = useState(false);
+  const [tmdbNotice, setTmdbNotice] = useState<string | null>(null);
 
   // Episode Editor Modal
   const [isEpisodeModalOpen, setIsEpisodeModalOpen] = useState(false);
@@ -96,6 +100,39 @@ export const AdminSeries: React.FC = () => {
     await deleteEpisode(epId);
     const updated = await getEpisodesBySeries(activeSeriesForEpisodes.id);
     setEpisodesList(updated);
+  };
+
+  const handleAutoDetectSeries = async () => {
+    const query = (tmdbSeriesQuery || editingSeries?.title || '').trim();
+    if (!query) return;
+    setIsFetchingTmdb(true);
+    setTmdbNotice(null);
+    try {
+      let details: SeriesItem | null = null;
+      if (/^\d+$/.test(query)) {
+        details = await tmdbService.getSeriesDetails(query);
+      } else {
+        const searchRes = await tmdbService.search(query, 'tv', 1);
+        if (searchRes.length > 0 && searchRes[0].tmdbId) {
+          details = await tmdbService.getSeriesDetails(searchRes[0].tmdbId);
+        }
+      }
+
+      if (details) {
+        setEditingSeries((prev) => ({
+          ...prev,
+          ...details,
+          id: prev?.id || details.id
+        }));
+        setTmdbNotice(`Auto-detected "${details.title}" (${details.releaseYear})`);
+      } else {
+        setTmdbNotice('No matching TV series found on TMDb.');
+      }
+    } catch (err: any) {
+      setTmdbNotice(err.message || 'TMDb lookup failed');
+    } finally {
+      setIsFetchingTmdb(false);
+    }
   };
 
   const handleSaveSeries = async () => {
@@ -219,9 +256,45 @@ export const AdminSeries: React.FC = () => {
       {isSeriesModalOpen && editingSeries && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
           <div className="w-full max-w-2xl rounded-2xl bg-zinc-950 border border-white/15 p-6 space-y-4">
-            <h3 className="text-base font-bold text-white uppercase">
-              {editingSeries.title ? `Edit Series: ${editingSeries.title}` : 'Create Series'}
-            </h3>
+            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <h3 className="text-base font-bold text-white uppercase">
+                {editingSeries.title ? `Edit Series: ${editingSeries.title}` : 'Create Series'}
+              </h3>
+              <button onClick={() => setIsSeriesModalOpen(false)} className="text-zinc-400 hover:text-white">✕</button>
+            </div>
+
+            {/* TMDb Auto-Detect Bar */}
+            <div className="p-3 rounded-xl bg-red-950/30 border border-red-500/20 space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={tmdbSeriesQuery}
+                  onChange={(e) => setTmdbSeriesQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAutoDetectSeries();
+                    }
+                  }}
+                  placeholder="Auto-Detect: Enter Series Title or TMDb ID (e.g. 1399)..."
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-black/60 border border-red-500/30 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleAutoDetectSeries}
+                  disabled={isFetchingTmdb}
+                  className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isFetchingTmdb ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  <span>Auto-Detect</span>
+                </button>
+              </div>
+              {tmdbNotice && (
+                <div className="text-[11px] text-red-300 flex items-center gap-1">
+                  <span>{tmdbNotice}</span>
+                </div>
+              )}
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">

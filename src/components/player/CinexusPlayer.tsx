@@ -471,7 +471,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
         }`}
       >
         <img
-          src="https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_000000008aa48211972e3a8c2b195dbe.png"
+          src="https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_00000000a72882119fa9566af8cf7b28.png"
           alt="CINEXUS Watermark"
           className="h-5 sm:h-6 w-auto object-contain filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
         />

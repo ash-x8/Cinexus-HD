@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Logo } from '../common/Logo';
 import { X, Mail, Lock, User, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { getFriendlyAuthErrorMessage } from '../../services/authErrors';
 
 export const AuthModal: React.FC = () => {
   const { 
@@ -41,7 +42,7 @@ export const AuthModal: React.FC = () => {
         await sendPasswordReset(email.trim());
         setSuccessMessage('Password reset link sent! Please check your inbox.');
       } catch (err: any) {
-        setError(err.message || 'Failed to send password reset email. Please verify the address.');
+        setError(getFriendlyAuthErrorMessage(err));
       } finally {
         setLoading(false);
       }
@@ -67,7 +68,7 @@ export const AuthModal: React.FC = () => {
       }
       closeAuthModal();
     } catch (err: any) {
-      setError(err.message || 'Authentication error. Please check your credentials.');
+      setError(getFriendlyAuthErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -80,7 +81,7 @@ export const AuthModal: React.FC = () => {
       await loginWithGoogle();
       closeAuthModal();
     } catch (err: any) {
-      setError(err.message || 'Google authentication could not be completed.');
+      setError(getFriendlyAuthErrorMessage(err));
     } finally {
       setGoogleLoading(false);
     }

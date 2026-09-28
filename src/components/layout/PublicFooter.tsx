@@ -18,6 +18,17 @@ export const PublicFooter: React.FC = () => {
           <p className="text-[11px] text-zinc-500">
             © {new Date().getFullYear()} CINEXUS Entertainment. All distributed feeds require verified licensing.
           </p>
+          <div className="pt-2 flex items-center gap-1.5 text-xs text-zinc-400">
+            <span>Developed by</span>
+            <a
+              href="https://ash-wickramasinghe.site"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-red-500 hover:text-red-400 font-semibold underline underline-offset-4 decoration-red-500/40 hover:decoration-red-400 transition-colors"
+            >
+              Ash Wickramasinghe
+            </a>
+          </div>
         </div>
 
         {/* Navigation Columns */}

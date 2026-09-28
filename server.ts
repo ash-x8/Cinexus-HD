@@ -6,7 +6,7 @@ import { createServer as createViteServer } from 'vite';
 const PORT = 3000;
 const app = express();
 
-const TMDB_API_KEY = process.env.TMDB_API_KEY || '';
+const TMDB_API_KEY = process.env.TMDB_API_KEY || process.env.VITE_TMDB_API_KEY || '8265bd1679663a7ea12ac168da84d2e8';
 const TMDB_ACCESS_TOKEN = process.env.TMDB_ACCESS_TOKEN || '';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
