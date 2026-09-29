@@ -71,7 +71,16 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
             <ShieldAlert className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
             <div className="space-y-1">
               <span className="font-semibold block text-red-300">Access Restricted</span>
-              <span>{error}</span>
+              <p>{error}</p>
+              {error.includes('Authentication Method Disabled') && (
+                <div className="mt-2 p-2 rounded-xl bg-black/50 border border-red-500/30 text-[11px] text-zinc-300">
+                  <strong className="text-amber-400 block mb-1">Quick Fix in Firebase Console:</strong>
+                  <ol className="list-decimal list-inside space-y-0.5 text-zinc-400">
+                    <li>Go to Firebase Console &gt; Authentication &gt; Sign-in method.</li>
+                    <li>Toggle <strong>Email/Password</strong> and <strong>Google</strong> to Enabled.</li>
+                  </ol>
+                </div>
+              )}
             </div>
           </div>
         )}

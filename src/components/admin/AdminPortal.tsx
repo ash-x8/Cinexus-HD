@@ -101,7 +101,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         {error && (
           <div className="p-3.5 rounded-2xl bg-red-950/60 border border-red-500/50 text-red-300 text-xs flex items-start gap-2.5">
             <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-            <span>{error}</span>
+            <div className="space-y-1">
+              <span className="font-semibold block text-red-200">Access Restricted</span>
+              <p>{error}</p>
+              {error.includes('Authentication Method Disabled') && (
+                <div className="mt-2 p-2 rounded-xl bg-black/50 border border-red-500/30 text-[11px] text-zinc-300">
+                  <strong className="text-amber-400 block mb-1">Quick Fix in Firebase Console:</strong>
+                  <ol className="list-decimal list-inside space-y-0.5 text-zinc-400">
+                    <li>Go to Firebase Console &gt; Authentication &gt; Sign-in method.</li>
+                    <li>Toggle <strong>Email/Password</strong> and <strong>Google</strong> to Enabled.</li>
+                  </ol>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

@@ -128,9 +128,22 @@ export const AuthModal: React.FC = () => {
 
         {/* Error Alert */}
         {error && (
-          <div className="mb-4 p-3 rounded-2xl bg-red-950/60 border border-red-600/40 text-red-300 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-            <span>{error}</span>
+          <div className="mb-4 p-3.5 rounded-2xl bg-red-950/70 border border-red-500/50 text-red-200 text-xs flex items-start gap-2.5 leading-relaxed">
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+            <div className="space-y-1">
+              <span className="font-semibold block text-red-300">Authentication Notice</span>
+              <p className="text-zinc-300">{error}</p>
+              {error.includes('Authentication Method Disabled') && (
+                <div className="mt-2 p-2.5 rounded-xl bg-black/50 border border-red-500/30 text-[11px] text-zinc-300">
+                  <strong className="text-amber-400 block mb-1">Quick Fix in Firebase Console:</strong>
+                  <ol className="list-decimal list-inside space-y-0.5 text-zinc-400">
+                    <li>Open your Firebase Console &gt; Authentication.</li>
+                    <li>Click on the <strong>Sign-in method</strong> tab.</li>
+                    <li>Enable <strong>Email/Password</strong> and <strong>Google</strong> providers.</li>
+                  </ol>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
