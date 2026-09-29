@@ -1,19 +1,28 @@
 import React, { useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
 import { auth, googleProvider } from '../../firebase';
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile } from 'firebase/auth';
+import { 
+  signInWithPopup, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  sendPasswordResetEmail, 
+  updateProfile 
+} from 'firebase/auth';
 import { Logo } from '../common/Logo';
 import { X, Mail, Lock, User, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { getFriendlyAuthErrorMessage } from '../../services/authErrors';
 
-export const AuthModal: React.FC = () => {
-  const { 
-    authModalOpen, 
-    authModalMode, 
-    closeAuthModal, 
-    openAuthModal
-  } = useAuth();
+interface LoginModalProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+  defaultMode?: 'login' | 'register' | 'forgot_password';
+}
 
+export const LoginModal: React.FC<LoginModalProps> = ({ 
+  isOpen = true, 
+  onClose = () => {}, 
+  defaultMode = 'login' 
+}) => {
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot_password'>(defaultMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -22,25 +31,26 @@ export const AuthModal: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  if (!authModalOpen) return null;
+  if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
 
-    if (!email.trim()) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
       setError('Please provide your email address.');
       return;
     }
 
-    if (authModalMode === 'forgot_password') {
+    if (mode === 'forgot_password') {
       setLoading(true);
       try {
-        await sendPasswordResetEmail(auth, email.trim());
+        await sendPasswordResetEmail(auth, cleanEmail);
         setSuccessMessage('Password reset link sent! Please check your inbox.');
       } catch (err: any) {
-        console.error('[AuthModal resetPassword Error]', { code: err?.code, message: err?.message, err });
+        console.error('[LoginModal resetPassword Error]', { code: err?.code, message: err?.message, err });
         setError(getFriendlyAuthErrorMessage(err));
       } finally {
         setLoading(false);
@@ -53,26 +63,28 @@ export const AuthModal: React.FC = () => {
       return;
     }
 
-    if (authModalMode === 'register' && !name.trim()) {
+    if (mode === 'register' && !name.trim()) {
       setError('Please enter your preferred display name.');
       return;
     }
 
     setLoading(true);
     try {
-      if (authModalMode === 'login') {
-        await signInWithEmailAndPassword(auth, email.trim(), password);
+      if (mode === 'login') {
+        // Real Firebase Email & Password Authentication
+        await signInWithEmailAndPassword(auth, cleanEmail, password);
       } else {
-        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        // Real Firebase Account Creation
+        const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
         if (name.trim()) {
           try {
             await updateProfile(cred.user, { displayName: name.trim() });
           } catch {}
         }
       }
-      closeAuthModal();
+      onClose();
     } catch (err: any) {
-      console.error('[AuthModal Email Auth Error]', { code: err?.code, message: err?.message, err });
+      console.error('[LoginModal Email Auth Error]', { code: err?.code, message: err?.message, err });
       setError(getFriendlyAuthErrorMessage(err));
     } finally {
       setLoading(false);
@@ -83,10 +95,11 @@ export const AuthModal: React.FC = () => {
     setError(null);
     setGoogleLoading(true);
     try {
+      // Real Firebase Google OAuth Popup Authentication
       await signInWithPopup(auth, googleProvider);
-      closeAuthModal();
+      onClose();
     } catch (err: any) {
-      console.error('[AuthModal Google Auth Error]', { code: err?.code, message: err?.message, err });
+      console.error('[LoginModal Google Auth Error]', { code: err?.code, message: err?.message, err });
       setError(getFriendlyAuthErrorMessage(err));
     } finally {
       setGoogleLoading(false);
@@ -102,8 +115,7 @@ export const AuthModal: React.FC = () => {
 
         {/* Close Button */}
         <button
-          id="btn-close-auth-modal"
-          onClick={closeAuthModal}
+          onClick={onClose}
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full bg-slate-900/80 hover:bg-slate-800 transition-colors cursor-pointer"
         >
           <X className="w-5 h-5" />
@@ -113,14 +125,14 @@ export const AuthModal: React.FC = () => {
         <div className="flex flex-col items-center text-center mb-6">
           <Logo size="md" showSubtitle={false} className="mb-2" />
           <h2 className="text-xl font-bold font-display text-white tracking-wide mt-2">
-            {authModalMode === 'login' && 'Sign In to CINEXUS'}
-            {authModalMode === 'register' && 'Join CINEXUS'}
-            {authModalMode === 'forgot_password' && 'Reset Password'}
+            {mode === 'login' && 'Sign In to CINEXUS'}
+            {mode === 'register' && 'Join CINEXUS'}
+            {mode === 'forgot_password' && 'Reset Password'}
           </h2>
           <p className="text-xs text-slate-400 mt-1 max-w-xs">
-            {authModalMode === 'login' && 'Access your synchronized 4K watchlist, continue watching history, and personalized stream feeds.'}
-            {authModalMode === 'register' && 'Create your account to unlock 4K HDR playback, custom audio tracks, and private watchlists.'}
-            {authModalMode === 'forgot_password' && 'Enter your registered email address and we will dispatch a secure reset link.'}
+            {mode === 'login' && 'Access synchronized 4K watchlists, playback history, and personalized media feeds.'}
+            {mode === 'register' && 'Create your account to unlock 4K HDR playback and personalized stream feeds.'}
+            {mode === 'forgot_password' && 'Enter your registered email address and we will dispatch a secure reset link.'}
           </p>
         </div>
 
@@ -141,7 +153,7 @@ export const AuthModal: React.FC = () => {
         )}
 
         {/* Google Authentication Button */}
-        {authModalMode !== 'forgot_password' && (
+        {mode !== 'forgot_password' && (
           <div className="mb-4">
             <button
               type="button"
@@ -183,7 +195,7 @@ export const AuthModal: React.FC = () => {
 
         {/* Authentication Form */}
         <form onSubmit={handleSubmit} className="space-y-3.5">
-          {authModalMode === 'register' && (
+          {mode === 'register' && (
             <div className="space-y-1">
               <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-slate-400" />
@@ -215,18 +227,18 @@ export const AuthModal: React.FC = () => {
             />
           </div>
 
-          {authModalMode !== 'forgot_password' && (
+          {mode !== 'forgot_password' && (
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
                   <Lock className="w-3.5 h-3.5 text-slate-400" />
                   <span>Password</span>
                 </label>
-                {authModalMode === 'login' && (
+                {mode === 'login' && (
                   <button
                     type="button"
-                    onClick={() => openAuthModal('forgot_password')}
-                    className="text-[11px] text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
+                    onClick={() => setMode('forgot_password')}
+                    className="text-[11px] text-red-500 hover:text-red-400 transition-colors cursor-pointer"
                   >
                     Forgot password?
                   </button>
@@ -243,58 +255,56 @@ export const AuthModal: React.FC = () => {
             </div>
           )}
 
-          <div className="pt-2">
-            <button
-              type="submit"
-              disabled={loading || googleLoading}
-              className="w-full py-3 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-lg shadow-red-950/60 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {loading ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <span>
-                  {authModalMode === 'login' && 'Sign In'}
-                  {authModalMode === 'register' && 'Create Free Account'}
-                  {authModalMode === 'forgot_password' && 'Send Reset Link'}
-                </span>
-              )}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading || googleLoading}
+            className="w-full py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-red-950/50 cursor-pointer disabled:opacity-50 mt-2"
+          >
+            {loading ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
+            ) : (
+              mode === 'login' ? 'Sign In' : mode === 'register' ? 'Create Account' : 'Dispatch Reset Email'
+            )}
+          </button>
         </form>
 
-        {/* Toggle Mode */}
-        <div className="mt-5 pt-4 border-t border-slate-800/80 text-center">
-          {authModalMode === 'forgot_password' ? (
-            <button
-              type="button"
-              onClick={() => openAuthModal('login')}
-              className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Sign In</span>
-            </button>
-          ) : authModalMode === 'login' ? (
-            <p className="text-xs text-slate-400">
+        {/* Footer Mode Switcher */}
+        <div className="mt-5 pt-4 border-t border-slate-800/80 text-center text-xs text-slate-400">
+          {mode === 'login' && (
+            <p>
               New to CINEXUS?{' '}
               <button
                 type="button"
-                onClick={() => openAuthModal('register')}
-                className="text-red-400 hover:text-red-300 font-bold ml-1 cursor-pointer transition-colors"
+                onClick={() => setMode('register')}
+                className="text-red-500 hover:text-red-400 font-semibold cursor-pointer ml-1"
               >
-                Register Now
+                Create Account
               </button>
             </p>
-          ) : (
-            <p className="text-xs text-slate-400">
-              Already have an account?{' '}
+          )}
+
+          {mode === 'register' && (
+            <p>
+              Already registered?{' '}
               <button
                 type="button"
-                onClick={() => openAuthModal('login')}
-                className="text-red-400 hover:text-red-300 font-bold ml-1 cursor-pointer transition-colors"
+                onClick={() => setMode('login')}
+                className="text-red-500 hover:text-red-400 font-semibold cursor-pointer ml-1"
               >
                 Sign In
               </button>
             </p>
+          )}
+
+          {mode === 'forgot_password' && (
+            <button
+              type="button"
+              onClick={() => setMode('login')}
+              className="text-slate-400 hover:text-white flex items-center justify-center gap-1 mx-auto cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Return to Sign In</span>
+            </button>
           )}
         </div>
 
@@ -302,3 +312,5 @@ export const AuthModal: React.FC = () => {
     </div>
   );
 };
+
+export default LoginModal;

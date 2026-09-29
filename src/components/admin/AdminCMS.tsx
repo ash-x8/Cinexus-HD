@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
 import { auth, googleProvider } from '../../firebase';
 import { signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
 import { checkIsAdmin } from '../../services/firestore';
@@ -7,12 +6,15 @@ import { Logo } from '../common/Logo';
 import { Lock, Mail, ShieldAlert, ArrowRight, Loader2 } from 'lucide-react';
 import { getFriendlyAuthErrorMessage } from '../../services/authErrors';
 
-interface AdminLoginProps {
-  onSuccess: () => void;
+interface AdminCMSProps {
+  onSuccess?: () => void;
+  onExit?: () => void;
 }
 
-export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
-  const { adminLogin } = useAuth();
+export const AdminCMS: React.FC<AdminCMSProps> = ({ 
+  onSuccess = () => {}, 
+  onExit = () => {} 
+}) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +28,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
 
     try {
       const cleanEmail = email.trim();
+      // Real Firebase Email & Password Authentication
       const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+      
+      // Verify Studio Administrator privileges
       const isAdm = await checkIsAdmin(cred.user.uid, cleanEmail);
       if (!isAdm) {
         setError('Access Denied: This account lacks Studio Administrator privileges.');
@@ -45,7 +50,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
     setError(null);
     setGoogleLoading(true);
     try {
+      // Real Firebase Google OAuth Popup Authentication
       const cred = await signInWithPopup(auth, googleProvider);
+      
+      // Verify Studio Administrator privileges
       const isAdm = await checkIsAdmin(cred.user.uid, cred.user.email || '');
       if (!isAdm) {
         setError(`Access Denied: Account (${cred.user.email}) does not have Studio Administrator clearance.`);
@@ -75,6 +83,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
           </p>
         </div>
 
+        {/* Error Notification */}
         {error && (
           <div className="p-3.5 rounded-2xl bg-red-600/10 border border-red-500/30 text-xs text-red-400 flex items-start gap-2.5 leading-relaxed">
             <ShieldAlert className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
@@ -180,15 +189,18 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
         </form>
 
         <div className="text-center pt-2">
-          <a
-            href="/"
-            className="text-xs text-zinc-400 hover:text-white transition-colors"
+          <button
+            type="button"
+            onClick={onExit}
+            className="text-xs text-zinc-400 hover:text-white transition-colors cursor-pointer"
           >
             ← Return to Public Cinema
-          </a>
+          </button>
         </div>
 
       </div>
     </div>
   );
 };
+
+export default AdminCMS;

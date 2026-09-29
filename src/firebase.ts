@@ -1,4 +1,4 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import {
   getAuth,
   GoogleAuthProvider,
@@ -9,100 +9,90 @@ import {
   sendPasswordResetEmail,
   updateProfile,
   User as FirebaseUser,
-  UserCredential
+  UserCredential,
+  Auth
 } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
-import firebaseAppletConfig from '../firebase-applet-config.json';
-import { getFriendlyAuthErrorMessage } from './services/authErrors';
+import { getFirestore, Firestore } from 'firebase/firestore';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
+import defaultConfig from '../firebase-applet-config.json';
 
-// Dual-source configuration: supports both Vite environment variables and firebase-applet-config.json
-const env = (import.meta as any).env || {};
-const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY || (firebaseAppletConfig as any).apiKey,
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || (firebaseAppletConfig as any).authDomain,
-  projectId: env.VITE_FIREBASE_PROJECT_ID || (firebaseAppletConfig as any).projectId,
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || (firebaseAppletConfig as any).storageBucket,
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || (firebaseAppletConfig as any).messagingSenderId,
-  appId: env.VITE_FIREBASE_APP_ID || (firebaseAppletConfig as any).appId,
-  firestoreDatabaseId: (firebaseAppletConfig as any).firestoreDatabaseId
+// Safely resolve clean environment variable without corrupted/empty string states
+const getEnvVal = (key: string, fallback: string = ''): string => {
+  try {
+    const val = (import.meta as any).env?.[key];
+    if (typeof val === 'string' && val.trim().length > 0) {
+      return val.trim();
+    }
+  } catch {}
+  return fallback;
 };
 
-// 1. Initialize Firebase App instance singleton
-export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+// Pristine Firebase configuration
+export const firebaseConfig = {
+  apiKey: getEnvVal('VITE_FIREBASE_API_KEY', defaultConfig.apiKey),
+  authDomain: getEnvVal('VITE_FIREBASE_AUTH_DOMAIN', defaultConfig.authDomain),
+  projectId: getEnvVal('VITE_FIREBASE_PROJECT_ID', defaultConfig.projectId),
+  storageBucket: getEnvVal('VITE_FIREBASE_STORAGE_BUCKET', defaultConfig.storageBucket),
+  messagingSenderId: getEnvVal('VITE_FIREBASE_MESSAGING_SENDER_ID', defaultConfig.messagingSenderId),
+  appId: getEnvVal('VITE_FIREBASE_APP_ID', defaultConfig.appId)
+};
 
-// 2. Initialize Firebase Auth
-export const auth = getAuth(app);
+// 1. Initialize or retrieve existing Firebase App instance
+export const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// 3. Initialize Google Auth Provider with recommended settings
-export const googleProvider = new GoogleAuthProvider();
+// 2. Initialize Firebase Authentication
+export const auth: Auth = getAuth(app);
+
+// 3. Initialize Google Auth Provider
+export const googleProvider: GoogleAuthProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
-// 4. Initialize Cloud Firestore with dedicated Database ID if configured
-export const db = firebaseConfig.firestoreDatabaseId
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+// 4. Initialize Cloud Firestore
+export const db: Firestore = (defaultConfig as any).firestoreDatabaseId
+  ? getFirestore(app, (defaultConfig as any).firestoreDatabaseId)
   : getFirestore(app);
 
 // 5. Initialize Firebase Storage
-export const storage = getStorage(app);
+export const storage: FirebaseStorage = getStorage(app);
 
 /**
- * Helper function: Sign in with Google Popup
+ * Perform real Google Sign-In with popup
  */
 export async function signInWithGoogle(): Promise<{ user: FirebaseUser; credential: UserCredential }> {
   try {
     const credential = await signInWithPopup(auth, googleProvider);
-    
-    // Sync basic profile document into Firestore if new
-    try {
-      const userRef = doc(db, 'users', credential.user.uid);
-      const userSnap = await getDoc(userRef);
-      if (!userSnap.exists()) {
-        await setDoc(userRef, {
-          id: credential.user.uid,
-          email: credential.user.email || '',
-          name: credential.user.displayName || credential.user.email?.split('@')[0] || 'Cinema Fan',
-          avatarUrl: credential.user.photoURL || '',
-          role: credential.user.email === 'kushanashvika216@gmail.com' ? 'ADMIN' : 'USER',
-          createdAt: new Date().toISOString()
-        }, { merge: true });
-      }
-    } catch (e) {
-      console.warn('[Firebase] Firestore user profile sync skipped:', e);
-    }
-    
     return { user: credential.user, credential };
   } catch (error: any) {
-    console.error('[Firebase signInWithGoogle Error]:', error);
-    const friendlyMessage = getFriendlyAuthErrorMessage(error);
-    const customError = new Error(friendlyMessage);
-    (customError as any).code = error.code;
-    (customError as any).rawError = error;
-    throw customError;
+    console.error('[Firebase signInWithGoogle Error]', {
+      code: error?.code,
+      message: error?.message,
+      error
+    });
+    throw error;
   }
 }
 
 /**
- * Helper function: Login with Email & Password
+ * Perform real Email & Password login
  */
 export async function loginWithEmail(email: string, pass: string): Promise<UserCredential> {
   try {
     const credential = await signInWithEmailAndPassword(auth, email.trim(), pass);
     return credential;
   } catch (error: any) {
-    console.error('[Firebase loginWithEmail Error]:', error);
-    const friendlyMessage = getFriendlyAuthErrorMessage(error);
-    const customError = new Error(friendlyMessage);
-    (customError as any).code = error.code;
-    (customError as any).rawError = error;
-    throw customError;
+    console.error('[Firebase loginWithEmail Error]', {
+      code: error?.code,
+      message: error?.message,
+      error
+    });
+    throw error;
   }
 }
 
 /**
- * Helper function: Register with Email, Password & Display Name
+ * Perform real Email & Password registration
  */
 export async function registerWithEmail(email: string, pass: string, name?: string): Promise<UserCredential> {
   try {
@@ -110,57 +100,46 @@ export async function registerWithEmail(email: string, pass: string, name?: stri
     if (name?.trim()) {
       try {
         await updateProfile(credential.user, { displayName: name.trim() });
-      } catch (e) {
-        console.warn('[Firebase] Display name update error:', e);
+      } catch (profileErr) {
+        console.warn('[Firebase] Could not set display name:', profileErr);
       }
-    }
-    // Write profile document
-    try {
-      await setDoc(doc(db, 'users', credential.user.uid), {
-        id: credential.user.uid,
-        email: credential.user.email || '',
-        name: name?.trim() || credential.user.displayName || 'Cinema Fan',
-        role: credential.user.email === 'kushanashvika216@gmail.com' ? 'ADMIN' : 'USER',
-        createdAt: new Date().toISOString()
-      }, { merge: true });
-    } catch (e) {
-      console.warn('[Firebase] Initial profile set warning:', e);
     }
     return credential;
   } catch (error: any) {
-    console.error('[Firebase registerWithEmail Error]:', error);
-    const friendlyMessage = getFriendlyAuthErrorMessage(error);
-    const customError = new Error(friendlyMessage);
-    (customError as any).code = error.code;
-    (customError as any).rawError = error;
-    throw customError;
-  }
-}
-
-/**
- * Helper function: Sign out
- */
-export async function logoutUser(): Promise<void> {
-  try {
-    await signOut(auth);
-  } catch (error: any) {
-    console.error('[Firebase logoutUser Error]:', error);
+    console.error('[Firebase registerWithEmail Error]', {
+      code: error?.code,
+      message: error?.message,
+      error
+    });
     throw error;
   }
 }
 
 /**
- * Helper function: Send password reset email
+ * Sign out current user
+ */
+export async function logoutUser(): Promise<void> {
+  try {
+    await signOut(auth);
+  } catch (error: any) {
+    console.error('[Firebase logoutUser Error]', error);
+    throw error;
+  }
+}
+
+/**
+ * Send password reset email
  */
 export async function resetPassword(email: string): Promise<void> {
   try {
     await sendPasswordResetEmail(auth, email.trim());
   } catch (error: any) {
-    console.error('[Firebase resetPassword Error]:', error);
-    const friendlyMessage = getFriendlyAuthErrorMessage(error);
-    const customError = new Error(friendlyMessage);
-    (customError as any).code = error.code;
-    throw customError;
+    console.error('[Firebase resetPassword Error]', {
+      code: error?.code,
+      message: error?.message,
+      error
+    });
+    throw error;
   }
 }
 

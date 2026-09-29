@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
+import { auth, googleProvider } from '../../firebase';
+import { signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
+import { checkIsAdmin } from '../../services/firestore';
 import { Logo } from '../common/Logo';
 import { Shield, Lock, Mail, ArrowRight, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { getFriendlyAuthErrorMessage } from '../../services/authErrors';
 import { BRANDING } from '../../config/branding';
 
 interface AdminPortalProps {
@@ -19,7 +22,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 }) => {
   const handleSuccess = onSuccess || onAccessGranted || (() => {});
   const handleExit = onExit || onBackToSite || (() => {});
-  const { adminLogin, adminLoginWithGoogle } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -29,7 +31,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password.trim()) {
       setError('Please provide both authorized administrator email and security password.');
       return;
     }
@@ -38,14 +41,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setError(null);
 
     try {
-      const res = await adminLogin(email.trim(), password.trim());
-      if (res.success) {
-        handleSuccess();
-      } else {
-        setError(res.error || 'Access denied. This account lacks Studio Administrator privileges.');
+      const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+      const isAdm = await checkIsAdmin(cred.user.uid, cleanEmail);
+      if (!isAdm) {
+        setError('Access denied. This account lacks Studio Administrator privileges.');
+        return;
       }
+      handleSuccess();
     } catch (err: any) {
-      setError(err.message || 'Invalid administrator credentials. Access restricted.');
+      console.error('[AdminPortal Email Login Error]', { code: err?.code, message: err?.message, err });
+      setError(getFriendlyAuthErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -55,14 +60,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setError(null);
     setGoogleLoading(true);
     try {
-      const res = await adminLoginWithGoogle();
-      if (res.success) {
-        handleSuccess();
-      } else {
-        setError(res.error || 'Google authentication was not authorized for Studio CMS.');
+      const cred = await signInWithPopup(auth, googleProvider);
+      const isAdm = await checkIsAdmin(cred.user.uid, cred.user.email || '');
+      if (!isAdm) {
+        setError(`Access denied. Account (${cred.user.email}) does not have Studio Administrator privileges.`);
+        return;
       }
+      handleSuccess();
     } catch (err: any) {
-      setError(err.message || 'Google authentication could not be completed.');
+      console.error('[AdminPortal Google Login Error]', { code: err?.code, message: err?.message, err });
+      setError(getFriendlyAuthErrorMessage(err));
     } finally {
       setGoogleLoading(false);
     }
@@ -99,21 +106,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
         {/* Error Notification */}
         {error && (
-          <div className="p-3.5 rounded-2xl bg-red-950/60 border border-red-500/50 text-red-300 text-xs flex items-start gap-2.5">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <span className="font-semibold block text-red-200">Access Restricted</span>
-              <p>{error}</p>
-              {error.includes('Authentication Method Disabled') && (
-                <div className="mt-2 p-2 rounded-xl bg-black/50 border border-red-500/30 text-[11px] text-zinc-300">
-                  <strong className="text-amber-400 block mb-1">Quick Fix in Firebase Console:</strong>
-                  <ol className="list-decimal list-inside space-y-0.5 text-zinc-400">
-                    <li>Go to Firebase Console &gt; Authentication &gt; Sign-in method.</li>
-                    <li>Toggle <strong>Email/Password</strong> and <strong>Google</strong> to Enabled.</li>
-                  </ol>
-                </div>
-              )}
-            </div>
+          <div className="p-3.5 rounded-2xl bg-red-950/60 border border-red-500/40 text-red-200 text-xs flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <span className="flex-1">{error}</span>
           </div>
         )}
 
