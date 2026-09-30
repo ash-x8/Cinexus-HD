@@ -69,13 +69,13 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#040508] text-white flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md p-8 rounded-3xl bg-[#0b0f17] border border-white/10 shadow-2xl space-y-6">
+    <div className="min-h-screen bg-[#0B0D12] text-white flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-md p-8 rounded-3xl bg-[#12151E] border border-amber-500/20 shadow-[0_0_50px_rgba(229,169,60,0.15)] space-y-6">
         
         {/* Brand Lockup with Official Logo */}
         <div className="text-center flex flex-col items-center space-y-2">
           <Logo size="lg" className="mb-2" />
-          <h1 className="text-lg font-bold tracking-wider uppercase font-display text-white">
+          <h1 className="text-lg font-bold tracking-wider uppercase font-display text-amber-400">
             Studio CMS Console
           </h1>
           <p className="text-xs text-zinc-400">
@@ -128,7 +128,7 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
 
         <div className="relative flex items-center justify-center">
           <div className="border-t border-white/10 w-full" />
-          <span className="bg-[#0b0f17] px-3 text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+          <span className="bg-[#12151E] px-3 text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
             Or Use Master Credentials
           </span>
           <div className="border-t border-white/10 w-full" />
@@ -147,7 +147,7 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="kushanashvika216@gmail.com"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-zinc-900 border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30"
               />
             </div>
           </div>
@@ -164,7 +164,7 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-zinc-900 border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30"
               />
             </div>
           </div>
@@ -172,17 +172,17 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
           <button
             type="submit"
             disabled={loading || googleLoading}
-            className="w-full py-3 rounded-xl bg-red-600 hover:bg-red-700 text-xs font-semibold text-white uppercase tracking-wider transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-950/50 disabled:opacity-50 cursor-pointer"
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-xs font-bold text-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-50 cursor-pointer"
           >
             {loading ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin text-black" />
                 <span>Authenticating Studio...</span>
               </>
             ) : (
               <>
                 <span>Access CMS Console</span>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-4 h-4 text-black" />
               </>
             )}
           </button>

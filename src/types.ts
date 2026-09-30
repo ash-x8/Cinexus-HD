@@ -153,6 +153,8 @@ export interface MovieItem {
   isEditorPick?: boolean;
   isAwardWinner?: boolean;
   isSinhalaSubtitled?: boolean;
+  hasSinhalaSubtitles?: boolean;
+  isSriLankan?: boolean;
   hasDolbyAtmos?: boolean;
   hasDolbyVision?: boolean;
   hasHDR10Plus?: boolean;

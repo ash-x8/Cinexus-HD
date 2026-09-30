@@ -70,11 +70,11 @@ export const COLLECTIONS = {
 
 export const DEFAULT_THEME: ThemeConfig = {
   id: 'theme-default',
-  name: 'Cinexus Obsidian Red',
-  primaryAccent: '#e50914',
-  secondaryAccent: '#ff2a3b',
-  backgroundColor: '#07090e',
-  surfaceColor: '#0f141f',
+  name: 'Cinexus Dark Cinema Amber Gold',
+  primaryAccent: '#E5A93C',
+  secondaryAccent: '#F59E0B',
+  backgroundColor: '#0B0D12',
+  surfaceColor: '#12151E',
   textColor: '#f8fafc',
   textMutedColor: '#94a3b8',
   borderRadius: 'lg',

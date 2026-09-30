@@ -53,17 +53,17 @@ export const Logo: React.FC<LogoProps> = ({
     return (
       <div 
         onClick={onClick}
-        className={`relative flex flex-col items-center justify-center p-6 rounded-3xl bg-gradient-to-b from-[#141a24] to-[#07090e] border border-red-600/30 shadow-[0_0_40px_rgba(229,9,20,0.35)] select-none group cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:border-red-500/60 ${className}`}
+        className={`relative flex flex-col items-center justify-center p-6 rounded-3xl bg-gradient-to-b from-[#12151E] to-[#0B0D12] border border-amber-500/30 shadow-[0_0_40px_rgba(229,169,60,0.3)] select-none group cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:border-amber-500/60 ${className}`}
       >
-        <div className="absolute inset-0 rounded-3xl border border-red-500/10 pointer-events-none" />
+        <div className="absolute inset-0 rounded-3xl border border-amber-500/10 pointer-events-none" />
         <img
           src={logoSrc}
           alt="CINEXUS"
-          className="h-16 sm:h-20 w-auto object-contain filter drop-shadow-[0_0_20px_rgba(229,9,20,0.7)] transition-transform duration-300 group-hover:scale-105"
+          className="h-16 sm:h-20 w-auto object-contain filter drop-shadow-[0_0_20px_rgba(229,169,60,0.6)] transition-transform duration-300 group-hover:scale-105"
           onError={() => setHasError(true)}
         />
         {showSubtitle && (
-          <span className="text-[10px] font-bold text-slate-300 tracking-[0.25em] uppercase mt-2.5 opacity-90">
+          <span className="text-[10px] font-bold text-amber-300 tracking-[0.25em] uppercase mt-2.5 opacity-90">
             {BRANDING.tagline}
           </span>
         )}
@@ -78,7 +78,7 @@ export const Logo: React.FC<LogoProps> = ({
         <img
           src={logoSrc}
           alt="CINEXUS"
-          className={`${current.height} w-auto object-contain filter drop-shadow-[0_0_12px_rgba(229,9,20,0.6)]`}
+          className={`${current.height} w-auto object-contain filter drop-shadow-[0_0_12px_rgba(229,169,60,0.5)]`}
           onError={() => setHasError(true)}
         />
       </div>
@@ -94,12 +94,12 @@ export const Logo: React.FC<LogoProps> = ({
       <img
         src={logoSrc}
         alt="CINEXUS"
-        className={`${current.height} w-auto object-contain filter drop-shadow-[0_0_15px_rgba(229,9,20,0.5)] transition-transform duration-200 group-hover:scale-105`}
+        className={`${current.height} w-auto object-contain filter drop-shadow-[0_0_16px_rgba(229,169,60,0.45)] transition-transform duration-200 group-hover:scale-105`}
         onError={() => setHasError(true)}
       />
 
       {showSubtitle && (
-        <span className={`text-slate-400 font-bold uppercase tracking-[0.2em] ${current.subText} hidden sm:inline-block ml-1`}>
+        <span className={`text-amber-400/80 font-bold uppercase tracking-[0.2em] ${current.subText} hidden sm:inline-block ml-1`}>
           {BRANDING.tagline}
         </span>
       )}

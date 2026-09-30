@@ -16,17 +16,17 @@ export const BRANDING = {
   logoUrl: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_00000000a72882119fa9566af8cf7b28.png',
   faviconUrl: 'https://raw.githubusercontent.com/ash-x8/Media-Files/refs/heads/main/file_00000000a72882119fa9566af8cf7b28.png',
   
-  // Theme Color System
+  // Theme Color System (Luxury Dark Cinema Palette)
   colors: {
-    primary: '#e50914',
-    primaryGlow: 'rgba(229, 9, 20, 0.4)',
-    accentRed: '#ff2a3b',
-    deepRed: '#990008',
-    darkObsidian: '#07090e',
-    deepCarbon: '#0b0f17',
-    surfaceCard: '#111722',
+    primary: '#E5A93C',
+    primaryGlow: 'rgba(229, 169, 60, 0.4)',
+    accentGold: '#E5A93C',
+    accentAmber: '#F59E0B',
+    darkObsidian: '#0B0D12',
+    deepCarbon: '#0e1117',
+    surfaceCard: '#12151E',
     borderMuted: 'rgba(255, 255, 255, 0.08)',
-    borderActive: 'rgba(239, 68, 68, 0.5)',
+    borderActive: 'rgba(229, 169, 60, 0.5)',
     textPrimary: '#f8fafc',
     textSecondary: '#94a3b8',
   },

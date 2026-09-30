@@ -19,7 +19,10 @@ import {
   RefreshCw,
   ArrowLeft,
   Check,
-  Tv
+  Tv,
+  Moon,
+  Lightbulb,
+  Sparkles
 } from 'lucide-react';
 import { MovieItem, EpisodeItem, VideoSource, ServerEmbeds, SubtitleTrack } from '../../types';
 import { usePlayer } from '../../context/PlayerContext';
@@ -99,6 +102,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isTheater, setIsTheater] = useState(false);
+  const [isCinemaMode, setIsCinemaMode] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -373,8 +377,15 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
           e.preventDefault();
           setIsTheater((prev) => !prev);
           break;
+        case 'c':
+        case 'C':
+          e.preventDefault();
+          setIsCinemaMode((prev) => !prev);
+          break;
         case 'Escape':
-          if (showSettingsMenu || showServerMenu || showSubtitleMenu) {
+          if (isCinemaMode) {
+            setIsCinemaMode(false);
+          } else if (showSettingsMenu || showServerMenu || showSubtitleMenu) {
             setShowSettingsMenu(false);
             setShowServerMenu(false);
             setShowSubtitleMenu(false);
@@ -387,7 +398,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlaying, isMuted, duration, showSettingsMenu, showServerMenu, showSubtitleMenu]);
+  }, [isPlaying, isMuted, duration, showSettingsMenu, showServerMenu, showSubtitleMenu, isCinemaMode]);
 
   // Format time mm:ss or hh:mm:ss
   const formatTime = (secs: number) => {
@@ -402,17 +413,40 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
   };
 
   return (
-    <div
-      ref={containerRef}
-      onMouseMove={handleMouseMove}
-      className={`relative bg-black select-none overflow-hidden transition-all duration-300 ${
-        isFullscreen
-          ? 'fixed inset-0 z-50 w-screen h-screen'
-          : isTheater
-          ? 'w-full aspect-[21/9] max-h-[85vh] rounded-none'
-          : 'w-full aspect-video max-h-[80vh] rounded-2xl border border-white/10 shadow-2xl'
-      }`}
-    >
+    <>
+      {/* Cinema Mode Ambient Dim Lights Overlay */}
+      {isCinemaMode && (
+        <div
+          onClick={() => setIsCinemaMode(false)}
+          className="fixed inset-0 z-40 bg-[#0B0D12]/95 backdrop-blur-md transition-all duration-500 flex items-start justify-between p-6 cursor-pointer"
+        >
+          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#12151E] border border-amber-500/40 text-amber-300 text-xs font-semibold shadow-2xl">
+            <Moon className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            <span>Cinema Mode Active • Lights Dimmed</span>
+          </div>
+          <button
+            onClick={() => setIsCinemaMode(false)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs text-zinc-300 hover:text-white transition-colors cursor-pointer"
+          >
+            <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
+            <span>Restore Lights (C / Esc)</span>
+          </button>
+        </div>
+      )}
+
+      <div
+        ref={containerRef}
+        onMouseMove={handleMouseMove}
+        className={`relative bg-black select-none overflow-hidden transition-all duration-300 ${
+          isFullscreen
+            ? 'fixed inset-0 z-50 w-screen h-screen'
+            : isCinemaMode
+            ? 'fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[94vw] max-w-6xl aspect-video rounded-3xl border border-amber-500/40 shadow-[0_0_80px_rgba(229,169,60,0.3)]'
+            : isTheater
+            ? 'w-full aspect-[21/9] max-h-[85vh] rounded-none'
+            : 'w-full aspect-video max-h-[80vh] rounded-2xl border border-white/10 shadow-2xl'
+        }`}
+      >
       {/* Top Bar Overlay */}
       <div
         className={`absolute top-0 inset-x-0 z-30 flex items-center justify-between p-4 sm:p-6 bg-gradient-to-b from-black/85 via-black/40 to-transparent transition-opacity duration-300 ${
@@ -441,7 +475,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
             <div className="text-xs text-zinc-400 flex items-center gap-2 mt-0.5">
               <span>{activeContent?.releaseYear}</span>
               <span>·</span>
-              <span className="text-red-500 font-semibold">{activeContent?.quality}</span>
+              <span className="text-amber-400 font-semibold">{activeContent?.quality}</span>
               {currentSource && (
                 <>
                   <span>·</span>
@@ -456,9 +490,9 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
         {sources.length > 1 && (
           <button
             onClick={() => setShowServerMenu((v) => !v)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-white backdrop-blur-md border border-white/10 transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-white backdrop-blur-md border border-amber-500/20 transition-colors cursor-pointer"
           >
-            <Server className="w-3.5 h-3.5 text-red-500" />
+            <Server className="w-3.5 h-3.5 text-amber-400" />
             <span>Switch Server ({sources.length})</span>
           </button>
         )}
@@ -520,15 +554,15 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
       {/* Buffering Indicator */}
       {isBuffering && !hasError && currentSource?.type !== 'iframe' && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-none">
-          <div className="w-12 h-12 rounded-full border-2 border-red-600/30 border-t-red-600 animate-spin" />
-          <p className="mt-3 text-xs tracking-wider text-zinc-300 font-medium uppercase">Buffering Master Feed...</p>
+          <div className="w-12 h-12 rounded-full border-2 border-amber-500/30 border-t-amber-500 animate-spin" />
+          <p className="mt-3 text-xs tracking-wider text-amber-300/90 font-medium uppercase">Buffering Cinema Feed...</p>
         </div>
       )}
 
       {/* Error & Source Failover State */}
       {hasError && (
-        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center p-6 text-center bg-[#07090e]/95 backdrop-blur-lg">
-          <div className="w-14 h-14 rounded-2xl bg-red-600/10 border border-red-500/20 flex items-center justify-center text-red-500 mb-4">
+        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center p-6 text-center bg-[#0B0D12]/95 backdrop-blur-lg">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-4 shadow-[0_0_30px_rgba(229,169,60,0.2)]">
             <AlertCircle className="w-8 h-8" />
           </div>
           <h3 className="text-lg font-semibold text-white">Playback source unavailable</h3>
@@ -537,7 +571,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button
               onClick={initializeStream}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-xs font-semibold text-white transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-xs font-bold text-zinc-950 transition-colors shadow-lg shadow-amber-950/40 cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Retry Stream</span>
@@ -550,9 +584,9 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
                   setActiveSourceIndex(nextIndex);
                   setHasError(false);
                 }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white border border-white/10 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white border border-white/10 transition-colors cursor-pointer"
               >
-                <Server className="w-3.5 h-3.5" />
+                <Server className="w-3.5 h-3.5 text-amber-400" />
                 <span>Next Server ({sources[(activeSourceIndex + 1) % sources.length]?.title})</span>
               </button>
             )}
@@ -560,7 +594,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
             {onClose && (
               <button
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 transition-colors"
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 transition-colors cursor-pointer"
               >
                 Back to Details
               </button>
@@ -571,12 +605,12 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
 
       {/* Server Selection Flyout */}
       {showServerMenu && (
-        <div className="absolute top-16 right-6 z-40 w-72 p-3 rounded-2xl bg-zinc-950/95 border border-white/15 shadow-2xl backdrop-blur-xl animate-fadeIn">
+        <div className="absolute top-16 right-6 z-40 w-72 p-3 rounded-2xl bg-[#12151E]/95 border border-amber-500/20 shadow-2xl backdrop-blur-xl animate-fadeIn">
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/10 text-xs font-semibold text-white">
             <span className="flex items-center gap-2">
-              <Server className="w-4 h-4 text-red-500" /> Authorized Streaming Servers
+              <Server className="w-4 h-4 text-amber-400" /> Authorized Streaming Servers
             </span>
-            <button onClick={() => setShowServerMenu(false)} className="text-zinc-400 hover:text-white">✕</button>
+            <button onClick={() => setShowServerMenu(false)} className="text-zinc-400 hover:text-white cursor-pointer">✕</button>
           </div>
           <div className="space-y-1.5 max-h-60 overflow-y-auto">
             {sources.map((src: PlaybackSource, idx: number) => (
@@ -586,9 +620,9 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
                   setActiveSourceIndex(idx);
                   setShowServerMenu(false);
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs transition-colors ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs transition-colors cursor-pointer ${
                   activeSourceIndex === idx
-                    ? 'bg-red-600/20 text-red-400 border border-red-500/30 font-medium'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-medium'
                     : 'bg-white/5 hover:bg-white/10 text-zinc-300'
                 }`}
               >
@@ -596,7 +630,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
                   <div className="font-medium text-white">{src.title}</div>
                   <div className="text-[10px] text-zinc-400 uppercase">{src.providerName} · {src.type}</div>
                 </div>
-                {activeSourceIndex === idx && <Check className="w-4 h-4 text-red-400" />}
+                {activeSourceIndex === idx && <Check className="w-4 h-4 text-amber-400" />}
               </button>
             ))}
           </div>
@@ -605,17 +639,17 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
 
       {/* Settings Menu Flyout */}
       {showSettingsMenu && (
-        <div className="absolute bottom-20 right-6 z-40 w-56 p-3 rounded-2xl bg-zinc-950/95 border border-white/15 shadow-2xl backdrop-blur-xl text-xs text-white">
-          <div className="font-semibold text-zinc-400 pb-2 mb-2 border-b border-white/10 uppercase tracking-wider text-[10px]">
+        <div className="absolute bottom-20 right-6 z-40 w-56 p-3 rounded-2xl bg-[#12151E]/95 border border-amber-500/20 shadow-2xl backdrop-blur-xl text-xs text-white">
+          <div className="font-semibold text-amber-400/90 pb-2 mb-2 border-b border-white/10 uppercase tracking-wider text-[10px]">
             Playback Speed
           </div>
           <div className="grid grid-cols-3 gap-1.5 mb-3">
-            {[0.75, 1, 1.25, 1.5, 2].map((spd) => (
+            {[0.5, 0.75, 1, 1.25, 1.5, 2].map((spd) => (
               <button
                 key={spd}
                 onClick={() => handleSpeedChange(spd)}
-                className={`py-1 rounded-lg text-center transition-colors ${
-                  playbackRate === spd ? 'bg-red-600 text-white font-semibold' : 'bg-white/5 hover:bg-white/10 text-zinc-300'
+                className={`py-1 rounded-lg text-center transition-colors cursor-pointer ${
+                  playbackRate === spd ? 'bg-amber-500 text-zinc-950 font-bold' : 'bg-white/5 hover:bg-white/10 text-zinc-300'
                 }`}
               >
                 {spd}x
@@ -623,23 +657,23 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
             ))}
           </div>
 
-          <div className="font-semibold text-zinc-400 pb-2 mb-2 border-b border-white/10 uppercase tracking-wider text-[10px]">
+          <div className="font-semibold text-amber-400/90 pb-2 mb-2 border-b border-white/10 uppercase tracking-wider text-[10px]">
             Display Quality
           </div>
           <div className="space-y-1">
-            {['Auto', '4K Ultra HD', '1080p FHD', '720p HD'].map((q) => (
+            {['Auto', '4K Ultra HD', '1080p FHD', '720p HD', '480p SD'].map((q) => (
               <button
                 key={q}
                 onClick={() => {
                   setActiveQuality(q);
                   setShowSettingsMenu(false);
                 }}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors ${
-                  activeQuality === q ? 'bg-white/15 text-white font-medium' : 'hover:bg-white/5 text-zinc-400'
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
+                  activeQuality === q ? 'bg-amber-500/20 text-amber-300 font-medium border border-amber-500/30' : 'hover:bg-white/5 text-zinc-400'
                 }`}
               >
                 <span>{q}</span>
-                {activeQuality === q && <Check className="w-3.5 h-3.5 text-red-500" />}
+                {activeQuality === q && <Check className="w-3.5 h-3.5 text-amber-400" />}
               </button>
             ))}
           </div>
@@ -648,10 +682,10 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
 
       {/* Subtitles (CC) Flyout Menu */}
       {showSubtitleMenu && (
-        <div className="absolute bottom-20 right-14 z-40 w-64 p-3 rounded-2xl bg-zinc-950/95 border border-white/15 shadow-2xl backdrop-blur-xl text-xs text-white animate-fadeIn">
+        <div className="absolute bottom-20 right-14 z-40 w-64 p-3 rounded-2xl bg-[#12151E]/95 border border-amber-500/20 shadow-2xl backdrop-blur-xl text-xs text-white animate-fadeIn">
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/10 font-semibold text-zinc-300">
             <span className="flex items-center gap-2">
-              <Subtitles className="w-4 h-4 text-red-500" />
+              <Subtitles className="w-4 h-4 text-amber-400" />
               <span>Closed Captions & Subtitles</span>
             </span>
             <button onClick={() => setShowSubtitleMenu(false)} className="text-zinc-400 hover:text-white cursor-pointer">✕</button>
@@ -660,18 +694,18 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
             <button
               onClick={() => handleSubtitleChange('off')}
               className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-colors cursor-pointer ${
-                activeSubtitle === 'off' ? 'bg-red-600/20 text-red-400 font-semibold border border-red-500/30' : 'hover:bg-white/5 text-zinc-300'
+                activeSubtitle === 'off' ? 'bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30' : 'hover:bg-white/5 text-zinc-300'
               }`}
             >
               <span>Subtitles Off</span>
-              {activeSubtitle === 'off' && <Check className="w-3.5 h-3.5 text-red-400" />}
+              {activeSubtitle === 'off' && <Check className="w-3.5 h-3.5 text-amber-400" />}
             </button>
             {availableSubtitles.map((sub) => (
               <button
                 key={sub.id}
                 onClick={() => handleSubtitleChange(sub.language)}
                 className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-colors cursor-pointer ${
-                  activeSubtitle === sub.language ? 'bg-red-600/20 text-red-400 font-semibold border border-red-500/30' : 'hover:bg-white/5 text-zinc-300'
+                  activeSubtitle === sub.language ? 'bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30' : 'hover:bg-white/5 text-zinc-300'
                 }`}
               >
                 <span>{sub.label}</span>
@@ -696,7 +730,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
               <div className="h-full bg-white/30 transition-all duration-150" style={{ width: `${buffered}%` }} />
             </div>
             {/* Progress fill */}
-            <div className="absolute top-1/2 -translate-y-1/2 left-0 h-1 bg-red-600 rounded-full" style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }} />
+            <div className="absolute top-1/2 -translate-y-1/2 left-0 h-1 bg-amber-500 rounded-full shadow-[0_0_10px_rgba(229,169,60,0.8)]" style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }} />
             {/* Native range input overlay */}
             <input
               type="range"
@@ -715,7 +749,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
             <div className="flex items-center gap-3">
               <button
                 onClick={togglePlay}
-                className="w-10 h-10 rounded-full bg-white text-black hover:bg-zinc-200 flex items-center justify-center transition-transform hover:scale-105"
+                className="w-10 h-10 rounded-full bg-amber-400 text-zinc-950 hover:bg-amber-300 flex items-center justify-center transition-transform hover:scale-105 shadow-[0_0_15px_rgba(229,169,60,0.4)] cursor-pointer"
                 title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
               >
                 {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
@@ -749,7 +783,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
                   step="0.05"
                   value={isMuted ? 0 : volume}
                   onChange={handleVolumeChange}
-                  className="w-16 h-1 bg-white/20 accent-red-600 rounded-lg cursor-pointer transition-all"
+                  className="w-16 h-1 bg-white/20 accent-amber-500 rounded-lg cursor-pointer transition-all"
                 />
               </div>
 
@@ -785,16 +819,25 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
               {/* Subtitles (CC) */}
               <button
                 onClick={() => setShowSubtitleMenu((v) => !v)}
-                className={`p-2 transition-colors cursor-pointer ${activeSubtitle !== 'off' ? 'text-red-500 font-bold' : 'text-zinc-300 hover:text-white'}`}
+                className={`p-2 transition-colors cursor-pointer ${activeSubtitle !== 'off' ? 'text-amber-400 font-bold' : 'text-zinc-300 hover:text-white'}`}
                 title="Subtitles & Audio (CC)"
               >
                 <Subtitles className="w-4 h-4" />
               </button>
 
+              {/* Cinema Mode (Dim Lights) */}
+              <button
+                onClick={() => setIsCinemaMode((prev) => !prev)}
+                className={`p-2 transition-colors cursor-pointer ${isCinemaMode ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(229,169,60,0.8)]' : 'text-zinc-300 hover:text-white'}`}
+                title="Cinema Mode (Dim Lights - C)"
+              >
+                <Moon className="w-4 h-4" />
+              </button>
+
               {/* Theater Mode */}
               <button
                 onClick={() => setIsTheater((prev) => !prev)}
-                className={`p-2 transition-colors ${isTheater ? 'text-red-500' : 'text-zinc-300 hover:text-white'}`}
+                className={`p-2 transition-colors cursor-pointer ${isTheater ? 'text-amber-400' : 'text-zinc-300 hover:text-white'}`}
                 title="Theater Mode (T)"
               >
                 <Tv className="w-4 h-4" />
@@ -803,7 +846,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
               {/* Settings Menu */}
               <button
                 onClick={() => setShowSettingsMenu((v) => !v)}
-                className="p-2 text-zinc-300 hover:text-white transition-colors"
+                className="p-2 text-zinc-300 hover:text-white transition-colors cursor-pointer"
                 title="Settings"
               >
                 <Settings className="w-4 h-4" />
@@ -812,7 +855,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
               {/* Fullscreen */}
               <button
                 onClick={toggleFullscreen}
-                className="p-2 text-zinc-300 hover:text-white transition-colors"
+                className="p-2 text-zinc-300 hover:text-white transition-colors cursor-pointer"
                 title="Fullscreen (F)"
               >
                 {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
@@ -822,5 +865,6 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
         </div>
       )}
     </div>
+    </>
   );
 };

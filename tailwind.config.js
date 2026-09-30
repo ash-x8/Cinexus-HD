@@ -7,23 +7,29 @@ export default {
   theme: {
     extend: {
       colors: {
+        obsidian: '#0B0D12',
+        glassCard: '#12151E',
+        amberGold: '#E5A93C',
+        amberBright: '#F59E0B',
         cinexus: {
-          950: '#07090e',
-          900: '#0c1017',
-          850: '#111722',
-          800: '#17202e',
-          700: '#233044',
-          600: '#33445f',
-          500: '#486288',
-          accent: '#e50914',
-          gold: '#f5c518',
-          cyan: '#00e5ff',
-          neon: '#6366f1'
+          950: '#0B0D12', // Obsidian Dark
+          900: '#0e1117',
+          850: '#12151E', // Glassmorphism Card base
+          800: '#171c26',
+          700: '#232b3a',
+          600: '#344158',
+          500: '#4b5d7d',
+          accent: '#E5A93C', // Warm Amber Gold
+          amber: '#F59E0B',  // Vivid Amber
+          gold: '#E5A93C',
+          cyan: '#38bdf8',
+          neon: '#818cf8'
         }
       },
       fontFamily: {
         sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
-        display: ['Cinzel', 'Outfit', 'Plus Jakarta Sans', 'sans-serif'],
+        display: ['Outfit', 'Cinzel', 'Plus Jakarta Sans', 'sans-serif'],
+        cinema: ['Cinzel', 'serif']
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
@@ -31,8 +37,8 @@ export default {
       },
       keyframes: {
         glow: {
-          '0%': { boxShadow: '0 0 15px rgba(229, 9, 20, 0.4)' },
-          '100%': { boxShadow: '0 0 30px rgba(229, 9, 20, 0.8)' },
+          '0%': { boxShadow: '0 0 15px rgba(229, 169, 60, 0.35)' },
+          '100%': { boxShadow: '0 0 35px rgba(229, 169, 60, 0.75)' },
         }
       }
     },
