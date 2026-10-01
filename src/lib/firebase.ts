@@ -1,5 +1,7 @@
 export {
   app,
+  appCheck,
+  RECAPTCHA_SITE_KEY,
   auth,
   googleProvider,
   db,

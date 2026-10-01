@@ -1,5 +1,10 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import {
+  initializeAppCheck,
+  ReCaptchaV3Provider,
+  AppCheck
+} from "firebase/app-check";
+import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
@@ -31,22 +36,45 @@ export const firebaseConfig = {
 // 1. Initialize Firebase App instance singleton
 export const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// 2. Initialize Firebase Authentication
+// 2. Initialize Firebase App Check (Google reCAPTCHA v3)
+export const RECAPTCHA_SITE_KEY = "6LffgNgtAAAAAPEJV9c-d_Bxuv6iV45jfh35oxRf";
+
+let appCheckInstance: AppCheck | null = null;
+if (typeof window !== "undefined") {
+  try {
+    // Enable debug token for local and staging preview domains if testing off the primary production origin
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host.includes('run.app') || host.includes('webcontainer')) {
+      (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+
+    appCheckInstance = initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
+      isTokenAutoRefreshEnabled: true
+    });
+    console.info("[Firebase App Check] Initialized with Google reCAPTCHA v3 provider.");
+  } catch (err) {
+    console.warn("[Firebase App Check] Initialization skipped or already initialized:", err);
+  }
+}
+export const appCheck = appCheckInstance;
+
+// 3. Initialize Firebase Authentication
 export const auth: Auth = getAuth(app);
 
-// 3. Initialize Google Auth Provider
+// 4. Initialize Google Auth Provider
 export const googleProvider: GoogleAuthProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
   prompt: "select_account"
 });
 
-// 4. Initialize Cloud Firestore
+// 5. Initialize Cloud Firestore
 export const db: Firestore = getFirestore(app);
 
-// 5. Initialize Firebase Storage
+// 6. Initialize Firebase Storage
 export const storage: FirebaseStorage = getStorage(app);
 
-// 6. FCM Web Push Configuration
+// 7. FCM Web Push Configuration
 export const VAPID_KEY = "BMPwkRAMWqQI7SZeugiJqeJIH5JWi06aKyk0I8bDt6ItPK5o4svOqhDAN9Qg1UAjUEk_eNGKpm04gqUgjfUrQiM";
 
 let messagingInstance: Messaging | null = null;

@@ -56,6 +56,10 @@ export function getFriendlyAuthErrorMessage(error: any): string {
     case 'auth/unauthorized-domain':
       return 'This domain is not listed in your Firebase Authorized Domains (Authentication -> Settings).';
 
+    case 'auth/firebase-app-check-token-is-invalid':
+    case 'app-check/invalid-token':
+      return 'Firebase App Check security token verification failed. Please refresh the page or ensure this domain is added to Google reCAPTCHA v3.';
+
     default:
       if (message) {
         return message.replace(/^Firebase:\s*/i, '').replace(/\(auth\/[a-z-]+\)\.?/i, '').trim() || message;
