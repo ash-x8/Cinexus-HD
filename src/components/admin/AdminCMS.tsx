@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { auth, googleProvider } from '../../firebase';
-import { signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
+import React, { useState, useEffect } from 'react';
+import { auth, googleProvider, db } from '../../firebase';
+import { signInWithPopup, signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import { checkIsAdmin } from '../../services/firestore';
 import { Logo } from '../common/Logo';
 import { Lock, Mail, ShieldAlert, ArrowRight, Loader2 } from 'lucide-react';
@@ -20,6 +21,48 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [initialChecking, setInitialChecking] = useState(true);
+
+  // Monitor auth state on mount - ALWAYS call setLoading(false) and setInitialChecking(false)
+  useEffect(() => {
+    let isMounted = true;
+
+    // Safety timeout: ensure loading state never gets stuck indefinitely
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) {
+        setLoading(false);
+        setInitialChecking(false);
+      }
+    }, 1500);
+
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!isMounted) return;
+
+      try {
+        if (currentUser) {
+          const isAdm = await checkIsAdmin(currentUser.uid, currentUser.email || '');
+          if (isAdm && isMounted) {
+            onSuccess();
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('[AdminCMS onAuthStateChanged error]', err);
+      } finally {
+        // ALWAYS called in both success and error blocks
+        if (isMounted) {
+          setLoading(false);
+          setInitialChecking(false);
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
+  }, [onSuccess]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,10 +71,8 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
 
     try {
       const cleanEmail = email.trim();
-      // Real Firebase Email & Password Authentication
       const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
       
-      // Verify Studio Administrator privileges
       const isAdm = await checkIsAdmin(cred.user.uid, cleanEmail);
       if (!isAdm) {
         setError('Access Denied: This account lacks Studio Administrator privileges.');
@@ -42,6 +83,7 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
       console.error('[AdminCMS Email Login Error]', { code: err?.code, message: err?.message, err });
       setError(getFriendlyAuthErrorMessage(err));
     } finally {
+      // ALWAYS called to render form cleanly
       setLoading(false);
     }
   };
@@ -50,13 +92,27 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
     setError(null);
     setGoogleLoading(true);
     try {
-      // Real Firebase Google OAuth Popup Authentication
-      const cred = await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+
+      // Sync Firestore user profile document without blocking UI
+      try {
+        await setDoc(doc(db, "users", user.uid), {
+          uid: user.uid,
+          id: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+          role: 'ADMIN',
+          lastLogin: new Date().toISOString()
+        }, { merge: true });
+      } catch (dbErr) {
+        console.warn('[AdminCMS Google Login Firestore sync warning]', dbErr);
+      }
       
-      // Verify Studio Administrator privileges
-      const isAdm = await checkIsAdmin(cred.user.uid, cred.user.email || '');
+      const isAdm = await checkIsAdmin(user.uid, user.email || '');
       if (!isAdm) {
-        setError(`Access Denied: Account (${cred.user.email}) does not have Studio Administrator clearance.`);
+        setError(`Access Denied: Account (${user.email}) does not have Studio Administrator clearance.`);
         return;
       }
       onSuccess();
@@ -65,8 +121,20 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
       setError(getFriendlyAuthErrorMessage(err));
     } finally {
       setGoogleLoading(false);
+      setLoading(false);
     }
   };
+
+  if (initialChecking) {
+    return (
+      <div className="min-h-screen bg-[#0B0D12] text-white flex flex-col items-center justify-center p-4">
+        <div className="flex flex-col items-center space-y-3">
+          <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+          <p className="text-xs text-zinc-400">Verifying administrator credentials...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0B0D12] text-white flex flex-col items-center justify-center p-4">

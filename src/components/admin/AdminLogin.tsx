@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { auth, googleProvider } from '../../firebase';
+import { auth, googleProvider, db } from '../../firebase';
 import { signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import { checkIsAdmin } from '../../services/firestore';
 import { Logo } from '../common/Logo';
 import { Lock, Mail, ShieldAlert, ArrowRight, Loader2 } from 'lucide-react';
@@ -46,9 +47,25 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
     setGoogleLoading(true);
     try {
       const cred = await signInWithPopup(auth, googleProvider);
-      const isAdm = await checkIsAdmin(cred.user.uid, cred.user.email || '');
+      const user = cred.user;
+
+      try {
+        await setDoc(doc(db, "users", user.uid), {
+          uid: user.uid,
+          id: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+          role: 'ADMIN',
+          lastLogin: new Date().toISOString()
+        }, { merge: true });
+      } catch (dbErr) {
+        console.warn('[AdminLogin Firestore sync warning]:', dbErr);
+      }
+
+      const isAdm = await checkIsAdmin(user.uid, user.email || '');
       if (!isAdm) {
-        setError(`Access Denied: Account (${cred.user.email}) does not have Studio Administrator clearance.`);
+        setError(`Access Denied: Account (${user.email}) does not have Studio Administrator clearance.`);
         return;
       }
       onSuccess();
@@ -57,6 +74,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
       setError(getFriendlyAuthErrorMessage(err));
     } finally {
       setGoogleLoading(false);
+      setLoading(false);
     }
   };
 

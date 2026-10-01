@@ -1,7 +1,7 @@
 import React from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { AdminLogin } from '../components/admin/AdminLogin';
+import { AdminCMS } from '../components/admin/AdminCMS';
 import { AdminLayout, AdminTab } from '../components/admin/AdminLayout';
 import { AdminDashboard } from '../components/admin/AdminDashboard';
 import { AdminMovies } from '../components/admin/AdminMovies';
@@ -11,7 +11,7 @@ import { AdminMedia } from '../components/admin/AdminMedia';
 import { AdminHomepage } from '../components/admin/AdminHomepage';
 import { AdminSettings } from '../components/admin/AdminSettings';
 import { AdminAudit } from '../components/admin/AdminAudit';
-import { ShieldAlert, ArrowLeft } from 'lucide-react';
+import { ShieldAlert, ArrowLeft, Loader2 } from 'lucide-react';
 
 export const AdminPage: React.FC = () => {
   const { user, isAdmin, isLoading, logout } = useAuth();
@@ -46,16 +46,16 @@ export const AdminPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#040508] flex flex-col items-center justify-center space-y-3 text-white">
-        <div className="w-10 h-10 rounded-full border-2 border-red-600/30 border-t-red-600 animate-spin" />
+      <div className="min-h-screen bg-[#0B0D12] flex flex-col items-center justify-center space-y-3 text-white">
+        <Loader2 className="w-9 h-9 text-amber-500 animate-spin" />
         <p className="text-xs text-zinc-400">Verifying administrative credentials...</p>
       </div>
     );
   }
 
-  // If not logged in -> Show dedicated Admin Login
+  // If not logged in -> Show dedicated Admin CMS Console
   if (!user) {
-    return <AdminLogin onSuccess={() => {}} />;
+    return <AdminCMS onSuccess={() => {}} onExit={() => navigate('/')} />;
   }
 
   // If logged in but unauthorized -> Show Access Denied

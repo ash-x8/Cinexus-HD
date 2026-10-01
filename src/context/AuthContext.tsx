@@ -19,9 +19,11 @@ import { getFriendlyAuthErrorMessage } from '../services/authErrors';
 
 interface AuthContextType {
   user: UserProfile | null;
+  currentUser: FirebaseUser | null;
   firebaseUser: FirebaseUser | null;
   isAdmin: boolean;
   isLoading: boolean;
+  loading: boolean;
   authModalOpen: boolean;
   authModalMode: 'login' | 'register' | 'forgot_password';
   openAuthModal: (mode?: 'login' | 'register' | 'forgot_password') => void;
@@ -59,7 +61,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAuthModalOpen(false);
   };
 
-  // Sync user profile & admin state from Firestore
+  // Sync user profile & admin state from Firestore without blocking UI
   const syncUserData = async (fUser: FirebaseUser | null) => {
     if (!fUser) {
       setFirebaseUser(null);
@@ -70,50 +72,82 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     setFirebaseUser(fUser);
+    
+    // Quick in-memory baseline so UI immediately unblocks
+    const isMasterAdmin = (fUser.email === 'kushanashvika216@gmail.com');
+    const baselineProfile: UserProfile = {
+      id: fUser.uid,
+      email: fUser.email || '',
+      name: fUser.displayName || fUser.email?.split('@')[0] || 'Cinema Fan',
+      avatarUrl: fUser.photoURL || undefined,
+      role: isMasterAdmin ? 'ADMIN' : 'USER',
+      createdAt: new Date().toISOString()
+    };
+    setUser(baselineProfile);
+    setIsAdmin(isMasterAdmin);
+
+    // Asynchronously verify with Firestore
     try {
-      const isAdm = await checkIsAdmin(fUser.uid, fUser.email || '');
+      const isAdm = isMasterAdmin || await checkIsAdmin(fUser.uid, fUser.email || '');
       setIsAdmin(isAdm);
 
       const userDocRef = doc(db, COLLECTIONS.USERS, fUser.uid);
       const userSnap = await getDoc(userDocRef);
 
       if (userSnap.exists()) {
-        setUser({ id: fUser.uid, ...(userSnap.data() as Omit<UserProfile, 'id'>) });
+        const data = userSnap.data();
+        setUser({ 
+          id: fUser.uid, 
+          email: data.email || fUser.email || '',
+          name: data.displayName || data.name || fUser.displayName || 'Cinema Fan',
+          avatarUrl: data.photoURL || data.avatarUrl || fUser.photoURL || undefined,
+          role: (isAdm ? 'ADMIN' : data.role || 'USER') as UserRole,
+          createdAt: data.createdAt || new Date().toISOString()
+        });
       } else {
         const newProfile: UserProfile = {
-          id: fUser.uid,
-          email: fUser.email || '',
-          name: fUser.displayName || fUser.email?.split('@')[0] || 'Cinema Fan',
-          avatarUrl: fUser.photoURL || undefined,
-          role: (isAdm ? 'ADMIN' : 'USER') as UserRole,
-          createdAt: new Date().toISOString()
+          ...baselineProfile,
+          role: isAdm ? 'ADMIN' : 'USER'
         };
-        await setDoc(userDocRef, newProfile, { merge: true });
+        await setDoc(userDocRef, {
+          uid: fUser.uid,
+          id: fUser.uid,
+          email: fUser.email,
+          displayName: newProfile.name,
+          name: newProfile.name,
+          photoURL: fUser.photoURL || null,
+          avatarUrl: fUser.photoURL || null,
+          role: newProfile.role,
+          lastLogin: new Date().toISOString(),
+          createdAt: new Date().toISOString()
+        }, { merge: true });
         setUser(newProfile);
       }
     } catch (err) {
-      console.warn('[AuthContext] syncUserData fallback:', err);
-      // Fallback in-memory profile
-      const isAdm = fUser.email === 'kushanashvika216@gmail.com';
-      setIsAdmin(isAdm);
-      setUser({
-        id: fUser.uid,
-        email: fUser.email || '',
-        name: fUser.displayName || 'Cinema Fan',
-        avatarUrl: fUser.photoURL || undefined,
-        role: isAdm ? 'ADMIN' : 'USER',
-        createdAt: new Date().toISOString()
-      });
+      console.warn('[AuthContext] syncUserData background fetch warning:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (fUser) => {
-      syncUserData(fUser);
+    let isMounted = true;
+
+    // Safety timeout: ensure loading state never gets stuck indefinitely
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) setIsLoading(false);
+    }, 1500);
+
+    const unsubscribe = onAuthStateChanged(auth, async (fUser) => {
+      if (!isMounted) return;
+      await syncUserData(fUser);
     });
-    return () => unsubscribe();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, []);
 
   const loginWithEmail = async (email: string, pass: string): Promise<UserProfile> => {
@@ -163,17 +197,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       provider.setCustomParameters({
         prompt: 'select_account'
       });
-      const cred = await signInWithPopup(auth, provider);
-      await syncUserData(cred.user);
-      return {
-        id: cred.user.uid,
-        email: cred.user.email || '',
-        name: cred.user.displayName || 'Cinema Fan',
-        role: 'USER',
-        avatarUrl: cred.user.photoURL || undefined,
+      const result = await signInWithPopup(auth, provider);
+      const fUser = result.user;
+
+      const isAdm = (fUser.email === 'kushanashvika216@gmail.com') || await checkIsAdmin(fUser.uid, fUser.email || '');
+      const profile: UserProfile = {
+        id: fUser.uid,
+        email: fUser.email || '',
+        name: fUser.displayName || fUser.email?.split('@')[0] || 'Cinema Fan',
+        role: (isAdm ? 'ADMIN' : 'USER') as UserRole,
+        avatarUrl: fUser.photoURL || undefined,
         createdAt: new Date().toISOString()
       };
+
+      // Ensure Firestore user document creation doesn't block the UI or fail login
+      try {
+        await setDoc(doc(db, "users", fUser.uid), {
+          uid: fUser.uid,
+          id: fUser.uid,
+          email: fUser.email,
+          displayName: profile.name,
+          name: profile.name,
+          photoURL: fUser.photoURL || null,
+          avatarUrl: fUser.photoURL || null,
+          role: profile.role,
+          lastLogin: new Date().toISOString(),
+          createdAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (dbErr) {
+        console.warn('[AuthContext] Firestore sync warning:', dbErr);
+      }
+
+      setFirebaseUser(fUser);
+      setUser(profile);
+      setIsAdmin(isAdm);
+      setIsLoading(false);
+      return profile;
     } catch (err: any) {
+      console.error("Auth Error:", err?.code, err?.message);
       throw new Error(getFriendlyAuthErrorMessage(err));
     }
   };
@@ -303,9 +364,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     <AuthContext.Provider
       value={{
         user,
+        currentUser: firebaseUser,
         firebaseUser,
         isAdmin,
         isLoading,
+        loading: isLoading,
         authModalOpen,
         authModalMode,
         openAuthModal,

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { auth, googleProvider } from '../../firebase';
+import { auth, googleProvider, db } from '../../firebase';
+import { doc, setDoc } from 'firebase/firestore';
 import { 
   signInWithPopup, 
   signInWithEmailAndPassword, 
@@ -95,11 +96,29 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setError(null);
     setGoogleLoading(true);
     try {
-      // Real Firebase Google OAuth Popup Authentication
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+      
+      // Ensure Firestore user document creation doesn't block the UI or crash if network/rules delay
+      try {
+        await setDoc(doc(db, "users", user.uid), {
+          uid: user.uid,
+          id: user.uid,
+          email: user.email,
+          displayName: user.displayName || user.email?.split('@')[0] || 'Cinema Fan',
+          name: user.displayName || user.email?.split('@')[0] || 'Cinema Fan',
+          photoURL: user.photoURL || null,
+          avatarUrl: user.photoURL || null,
+          role: user.email === 'kushanashvika216@gmail.com' ? 'ADMIN' : 'USER',
+          lastLogin: new Date().toISOString()
+        }, { merge: true });
+      } catch (dbErr) {
+        console.warn('[LoginModal Firestore sync warning]:', dbErr);
+      }
+
       onClose();
     } catch (err: any) {
-      console.error('[LoginModal Google Auth Error]', { code: err?.code, message: err?.message, err });
+      console.error("Auth Error:", err?.code, err?.message);
       setError(getFriendlyAuthErrorMessage(err));
     } finally {
       setGoogleLoading(false);
