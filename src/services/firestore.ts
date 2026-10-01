@@ -52,6 +52,38 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
+/**
+ * Recursively cleans and sanitizes data objects before passing them to Cloud Firestore.
+ * Firestore strictly rejects undefined field values. This converts any `undefined` value
+ * to a safe fallback (e.g. empty string `""` or null) and recursively sanitizes nested objects and arrays.
+ */
+export const sanitizeData = <T extends Record<string, any> | any>(data: T): T => {
+  if (data === undefined) {
+    return "" as any;
+  }
+  if (data === null || typeof data !== 'object') {
+    return data;
+  }
+  if (data instanceof Date) {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => sanitizeData(item)) as any;
+  }
+
+  return Object.fromEntries(
+    Object.entries(data).map(([key, value]) => {
+      if (value === undefined) {
+        return [key, ""];
+      }
+      if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
+        return [key, sanitizeData(value)];
+      }
+      return [key, value];
+    })
+  ) as T;
+};
+
 export const COLLECTIONS = {
   MOVIES: 'movies',
   SERIES: 'series',
@@ -150,18 +182,21 @@ export async function getMovieBySlugOrId(identifier: string): Promise<MovieItem 
 
 export async function saveMovie(movie: MovieItem): Promise<void> {
   const id = movie.id || `mov_${Date.now()}`;
-  const slug = movie.slug || movie.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  const slug = movie.slug || (movie.title || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
   const data: MovieItem = {
     ...movie,
     id,
     slug,
+    mediaType: 'movie',
     isPublished: movie.isPublished !== undefined ? movie.isPublished : true,
     updatedAt: new Date().toISOString(),
     createdAt: movie.createdAt || new Date().toISOString()
   };
 
+  const cleanData = sanitizeData(data);
+
   try {
-    await setDoc(doc(db, COLLECTIONS.MOVIES, id), data, { merge: true });
+    await setDoc(doc(db, COLLECTIONS.MOVIES, id), cleanData, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.MOVIES}/${id}`);
   }
@@ -199,19 +234,16 @@ export async function bulkSaveMovies(
       const id = movie.id || `mov_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const slug = movie.slug || (movie.title || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
       const ref = doc(db, COLLECTIONS.MOVIES, id);
-      batch.set(
-        ref,
-        {
-          ...movie,
-          id,
-          slug,
-          mediaType: 'movie',
-          isPublished: movie.isPublished !== undefined ? movie.isPublished : true,
-          updatedAt: new Date().toISOString(),
-          createdAt: movie.createdAt || new Date().toISOString()
-        },
-        { merge: true }
-      );
+      const cleanData = sanitizeData({
+        ...movie,
+        id,
+        slug,
+        mediaType: 'movie',
+        isPublished: movie.isPublished !== undefined ? movie.isPublished : true,
+        updatedAt: new Date().toISOString(),
+        createdAt: movie.createdAt || new Date().toISOString()
+      });
+      batch.set(ref, cleanData, { merge: true });
     });
 
     try {
@@ -280,7 +312,7 @@ export async function getSeriesBySlugOrId(identifier: string): Promise<SeriesIte
 
 export async function saveSeries(series: SeriesItem): Promise<void> {
   const id = series.id || `tv_${Date.now()}`;
-  const slug = series.slug || series.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  const slug = series.slug || (series.title || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
   const data: SeriesItem = {
     ...series,
     id,
@@ -291,8 +323,10 @@ export async function saveSeries(series: SeriesItem): Promise<void> {
     createdAt: series.createdAt || new Date().toISOString()
   };
 
+  const cleanData = sanitizeData(data);
+
   try {
-    await setDoc(doc(db, COLLECTIONS.SERIES, id), data, { merge: true });
+    await setDoc(doc(db, COLLECTIONS.SERIES, id), cleanData, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.SERIES}/${id}`);
   }
@@ -341,8 +375,10 @@ export async function saveEpisode(episode: EpisodeItem): Promise<void> {
     createdAt: episode.createdAt || new Date().toISOString()
   };
 
+  const cleanData = sanitizeData(data);
+
   try {
-    await setDoc(doc(db, COLLECTIONS.EPISODES, id), data, { merge: true });
+    await setDoc(doc(db, COLLECTIONS.EPISODES, id), cleanData, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.EPISODES}/${id}`);
   }
@@ -387,8 +423,9 @@ export async function getHomepageSections(): Promise<HomepageSectionConfig[]> {
 
 export async function saveHomepageSection(section: HomepageSectionConfig): Promise<void> {
   const id = section.id || `sec_${Date.now()}`;
+  const cleanData = sanitizeData({ ...section, id });
   try {
-    await setDoc(doc(db, COLLECTIONS.HOMEPAGE, id), { ...section, id }, { merge: true });
+    await setDoc(doc(db, COLLECTIONS.HOMEPAGE, id), cleanData, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.HOMEPAGE}/${id}`);
   }
@@ -421,8 +458,9 @@ export async function getSiteSettings(): Promise<SiteSettings> {
 }
 
 export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
+  const cleanData = sanitizeData(settings);
   try {
-    await setDoc(doc(db, COLLECTIONS.SETTINGS, 'global_config'), settings, { merge: true });
+    await setDoc(doc(db, COLLECTIONS.SETTINGS, 'global_config'), cleanData, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.SETTINGS}/global_config`);
   }

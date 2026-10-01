@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, Tv, Film, Save, ListPlus, Radio, Sparkles, Loader2, Check, AlertTriangle } from 'lucide-react';
-import { getSeries, saveSeries, deleteSeries, getEpisodesBySeries, saveEpisode, deleteEpisode, logAdminAction } from '../../services/firestore';
+import { getSeries, saveSeries, deleteSeries, getEpisodesBySeries, saveEpisode, deleteEpisode, logAdminAction, sanitizeData } from '../../services/firestore';
 import { tmdbService } from '../../services/tmdb';
 import { SeriesItem, EpisodeItem } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -140,11 +140,12 @@ export const AdminSeries: React.FC = () => {
       alert('Please enter a series title.');
       return;
     }
-    const sToSave = {
+    const rawSeries = {
       ...editingSeries,
       mediaType: editingSeries.mediaType || 'tv',
       isPublished: editingSeries.isPublished !== undefined ? editingSeries.isPublished : true
-    } as SeriesItem;
+    };
+    const sToSave = sanitizeData(rawSeries) as SeriesItem;
 
     await saveSeries(sToSave);
     await logAdminAction(user?.email || 'admin', 'SAVE_SERIES', 'series', sToSave.id, `Saved series "${sToSave.title}"`);

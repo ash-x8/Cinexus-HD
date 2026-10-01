@@ -47,7 +47,7 @@ export function formatTMDBItem(tmdb: any, defaultMediaType: 'movie' | 'tv' = 'mo
     hasDolbyAtmos: true,
     hasDolbyVision: true,
     hasHDR10Plus: true,
-    trailerYoutubeId: trailer?.key,
+    trailerYoutubeId: trailer?.key || '',
     director: tmdb.credits?.crew?.find((c: any) => c.job === 'Director')?.name || tmdb.created_by?.[0]?.name || 'Studio Productions',
     writers: tmdb.credits?.crew?.filter((c: any) => ['Writer', 'Screenplay', 'Novel'].includes(c.job)).map((c: any) => c.name),
     productionCompanies: tmdb.production_companies ? tmdb.production_companies.map((c: any) => c.name) : undefined,

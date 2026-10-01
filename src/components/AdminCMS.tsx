@@ -1,1 +1,1 @@
-export { AdminCMS, default } from './admin/AdminCMS';
+export { AdminCMS, default, sanitizeData } from './admin/AdminCMS';

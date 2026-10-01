@@ -84,9 +84,9 @@ export function formatTMDBMovie(item: any): MovieItem {
     hasDolbyAtmos: true,
     hasDolbyVision: true,
     hasHDR10Plus: true,
-    trailerYoutubeId: trailer?.key,
-    director,
-    writers,
+    trailerYoutubeId: trailer?.key || '',
+    director: director || '',
+    writers: writers || '',
     cast: item.credits?.cast?.slice(0, 10).map((c: any) => ({
       id: c.id,
       name: c.name,
@@ -133,7 +133,7 @@ export function formatTMDBSeries(item: any): SeriesItem {
     episodesCount: item.number_of_episodes || 0,
     hasDolbyAtmos: true,
     hasDolbyVision: true,
-    trailerYoutubeId: trailer?.key,
+    trailerYoutubeId: trailer?.key || '',
     cast: item.credits?.cast?.slice(0, 10).map((c: any) => ({
       id: c.id,
       name: c.name,

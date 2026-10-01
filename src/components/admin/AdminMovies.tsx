@@ -25,7 +25,7 @@ import {
   User,
   Video
 } from 'lucide-react';
-import { getMovies, saveMovie, deleteMovie, bulkSaveMovies, logAdminAction } from '../../services/firestore';
+import { getMovies, saveMovie, deleteMovie, bulkSaveMovies, logAdminAction, sanitizeData } from '../../services/firestore';
 import { tmdbService } from '../../services/tmdb';
 import { MovieItem, VideoSource, ServerEmbeds } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -171,12 +171,14 @@ export const AdminMovies: React.FC = () => {
     }
     setIsSaving(true);
     try {
-      const movieToSave = {
+      const rawMovie = {
         ...editingMovie,
         mediaType: 'movie',
         isPublished: editingMovie.isPublished !== undefined ? editingMovie.isPublished : true,
         updatedAt: new Date().toISOString()
-      } as MovieItem;
+      };
+
+      const movieToSave = sanitizeData(rawMovie) as MovieItem;
 
       await saveMovie(movieToSave);
       await logAdminAction(
