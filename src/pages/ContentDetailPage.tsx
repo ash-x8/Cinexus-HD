@@ -18,6 +18,7 @@ import { tmdbService } from '../services/tmdb';
 import { MovieItem, SeriesItem, EpisodeItem } from '../types';
 import { usePlayer } from '../context/PlayerContext';
 import { ContentRow } from '../components/catalog/ContentRow';
+import { getYouTubeEmbedUrl } from '../utils/youtube';
 
 export const ContentDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -353,19 +354,19 @@ export const ContentDetailPage: React.FC = () => {
       </div>
 
       {/* Official Trailer Modal */}
-      {showTrailerModal && content.trailerYoutubeId && (
+      {showTrailerModal && getYouTubeEmbedUrl(content.trailerYoutubeId) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-fadeIn">
-          <div className="relative w-full max-w-4xl aspect-video rounded-2xl overflow-hidden bg-black border border-white/20 shadow-2xl">
+          <div className="relative w-full max-w-4xl aspect-video rounded-2xl overflow-hidden bg-black border border-[#D4AF37]/30 shadow-2xl">
             <button
               onClick={() => setShowTrailerModal(false)}
-              className="absolute top-4 right-4 z-20 p-2 rounded-full bg-black/60 hover:bg-black/90 text-white"
+              className="absolute top-4 right-4 z-20 p-2 rounded-full bg-black/60 hover:bg-black/90 text-white cursor-pointer"
             >
               ✕
             </button>
             <iframe
-              src={`https://www.youtube.com/embed/${content.trailerYoutubeId}?autoplay=1&rel=0`}
+              src={getYouTubeEmbedUrl(content.trailerYoutubeId)!}
               className="w-full h-full border-0"
-              allow="autoplay; encrypted-media; fullscreen"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
               title="Official Trailer"
             />

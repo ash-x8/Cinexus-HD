@@ -18,6 +18,7 @@ import {
   Volume2
 } from 'lucide-react';
 import { MovieItem, UserReview } from '../types';
+import { getYouTubeEmbedUrl, getYouTubeId } from '../utils/youtube';
 
 interface MovieDetailsModalProps {
   movie: MovieItem;
@@ -27,8 +28,8 @@ interface MovieDetailsModalProps {
   onToggleWatchlist: (movie: MovieItem) => void;
   onOpenWatchPartyWithMovie: (movie: MovieItem) => void;
   onOpenDownloadsWithMovie: (movie: MovieItem) => void;
-  allMovies: MovieItem[];
-  onSelectSimilarMovie: (movie: MovieItem) => void;
+  allMovies?: MovieItem[];
+  onSelectSimilarMovie?: (movie: MovieItem) => void;
 }
 
 export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
@@ -39,8 +40,8 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
   onToggleWatchlist,
   onOpenWatchPartyWithMovie,
   onOpenDownloadsWithMovie,
-  allMovies,
-  onSelectSimilarMovie
+  allMovies = [],
+  onSelectSimilarMovie = () => {}
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'episodes' | 'specs' | 'reviews'>('overview');
   const [showTrailerEmbed, setShowTrailerEmbed] = useState(false);
@@ -103,11 +104,11 @@ export const MovieDetailsModal: React.FC<MovieDetailsModalProps> = ({
 
         {/* Modal Header: Backdrop or Trailer Video */}
         <div className="relative aspect-video sm:aspect-[21/9] w-full bg-slate-950 overflow-hidden">
-          {showTrailerEmbed && movie.trailerYoutubeId ? (
+          {showTrailerEmbed && getYouTubeEmbedUrl(movie.trailerYoutubeId) ? (
             <iframe
-              src={`https://www.youtube-nocookie.com/embed/${movie.trailerYoutubeId}?autoplay=1&rel=0&modestbranding=1`}
-              title={`${movie.title} Trailer`}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              src={getYouTubeEmbedUrl(movie.trailerYoutubeId)!}
+              title={`${movie.title} Official Trailer`}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
               className="w-full h-full border-0"
             />

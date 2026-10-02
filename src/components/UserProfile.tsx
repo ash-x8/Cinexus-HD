@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useBrand } from '../context/BrandContext';
-import { auth, db } from '../firebase';
+import { auth, db, storage } from '../firebase';
 import { updateProfile } from 'firebase/auth';
 import { doc, setDoc, getDocs, collection, deleteDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   User, 
   Settings, 
@@ -21,7 +22,9 @@ import {
   LogOut, 
   ChevronRight,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Upload,
+  Loader2
 } from 'lucide-react';
 import { WatchProgress, MovieItem } from '../types';
 import { useNavigate, Link } from 'react-router-dom';
@@ -46,8 +49,76 @@ export const UserProfile: React.FC = () => {
   const [displayName, setDisplayName] = useState(user?.name || '');
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // File Picker Upload to Firebase Storage with Fallback
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.id) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setUpdateError('Image is too large. Please select a photo under 5MB.');
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setUpdateError(null);
+    setUpdateSuccess(false);
+
+    try {
+      const storageRef = ref(storage, `avatars/${user.id}_${Date.now()}`);
+      let downloadUrl = '';
+
+      try {
+        const snapshot = await uploadBytes(storageRef, file, {
+          contentType: file.type || 'image/jpeg'
+        });
+        downloadUrl = await getDownloadURL(snapshot.ref);
+      } catch (storageErr) {
+        console.warn('[UserProfile] Firebase Storage error or unprovisioned, using fallback Data URL:', storageErr);
+        downloadUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
+
+      setAvatarUrl(downloadUrl);
+
+      // Update Firebase Auth profile
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, {
+          photoURL: downloadUrl
+        });
+      }
+
+      // Update Firestore user document
+      await setDoc(
+        doc(db, 'users', user.id),
+        {
+          avatarUrl: downloadUrl,
+          photoURL: downloadUrl,
+          updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+
+      setUpdateSuccess(true);
+      setTimeout(() => setUpdateSuccess(false), 3500);
+    } catch (err: any) {
+      console.error('[UserProfile] Failed to upload avatar image:', err);
+      setUpdateError(err.message || 'Failed to upload profile photo.');
+    } finally {
+      setIsUploadingImage(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
 
   // Watch history and Watchlist states
   const [historyList, setHistoryList] = useState<WatchProgress[]>([]);
@@ -231,21 +302,42 @@ export const UserProfile: React.FC = () => {
           
           {/* Avatar with Gold Border */}
           <div className="relative group">
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-zinc-900 border-2 border-[#D4AF37] overflow-hidden shadow-2xl flex items-center justify-center text-3xl font-black text-[#D4AF37]">
+            {/* Hidden File Input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-zinc-900 border-2 border-[#D4AF37] overflow-hidden shadow-2xl flex items-center justify-center text-3xl font-black text-[#D4AF37] cursor-pointer relative group/avatar"
+            >
               {user.avatarUrl || avatarUrl ? (
                 <img
                   src={avatarUrl || user.avatarUrl}
                   alt={user.name}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover group-hover/avatar:scale-105 transition-transform"
                 />
               ) : (
                 <span>{(user.name || 'U')[0]?.toUpperCase()}</span>
               )}
+
+              {/* Uploading Spinner Overlay */}
+              {isUploadingImage && (
+                <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center gap-1 z-20">
+                  <Loader2 className="w-6 h-6 animate-spin text-[#D4AF37]" />
+                  <span className="text-[9px] font-bold text-[#D4AF37]">Uploading</span>
+                </div>
+              )}
             </div>
             <button
-              onClick={() => setActiveTab('overview')}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingImage}
               className="absolute -bottom-2 -right-2 p-2 rounded-xl bg-[#D4AF37] text-black hover:bg-amber-300 transition-colors shadow-lg cursor-pointer"
-              title="Change Avatar"
+              title="Upload photo from phone gallery or computer"
             >
               <Camera className="w-4 h-4" />
             </button>
@@ -391,9 +483,49 @@ export const UserProfile: React.FC = () => {
                 />
               </div>
 
+              {/* Gallery / File Image Upload */}
+              <div className="p-4 rounded-2xl bg-black/40 border border-[#D4AF37]/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <Camera className="w-3.5 h-3.5 text-[#D4AF37]" />
+                      <span>Upload Photo from Device / Gallery</span>
+                    </h4>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      Directly upload high-resolution profile images from your mobile gallery or computer storage.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingImage}
+                    className="px-4 py-2.5 rounded-xl bg-[#D4AF37]/15 hover:bg-[#D4AF37]/25 text-[#D4AF37] border border-[#D4AF37]/50 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isUploadingImage ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-[#D4AF37]" />
+                        <span>Uploading to Cloud Storage...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4" />
+                        <span>Choose Photo from Gallery / Device</span>
+                      </>
+                    )}
+                  </button>
+
+                  <span className="text-[10px] text-zinc-500 font-mono">
+                    PNG, JPG, WebP (Max 5MB)
+                  </span>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">
-                  Custom Avatar Image URL
+                  Or Paste Custom Avatar Image URL
                 </label>
                 <input
                   type="url"
