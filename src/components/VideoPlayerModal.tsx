@@ -1,6 +1,6 @@
 import React from 'react';
 import { MovieItem, EpisodeItem } from '../types';
-import { CinexusPlayer } from './player/CinexusPlayer';
+import { CinexusPlayer } from './CinexusPlayer';
 
 interface VideoPlayerModalProps {
   movie: MovieItem;

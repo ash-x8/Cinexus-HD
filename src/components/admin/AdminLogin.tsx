@@ -35,7 +35,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
       }
       onSuccess();
     } catch (err: any) {
-      console.error('[AdminCMS Email Login Error]', { code: err?.code, message: err?.message, err });
+      console.warn('[AdminLogin Email Auth Status]', { code: err?.code, message: err?.message });
       if (err?.code === 'auth/operation-not-allowed') {
         setError('Email/Password authentication is disabled in your Firebase Console. Please use "Continue with Google Administrator" above.');
       } else {

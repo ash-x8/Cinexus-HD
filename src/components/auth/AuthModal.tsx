@@ -102,16 +102,35 @@ export const AuthModal: React.FC = () => {
       }
       closeAuthModal();
     } catch (err: any) {
-      console.error('[AuthModal Email Auth Error]', { code: err?.code, message: err?.message, err });
+      console.warn('[AuthModal Email Auth Status]', { code: err?.code, message: err?.message });
       if (err?.code === 'auth/operation-not-allowed') {
         setIsMethodDisabled(true);
         setError('Email/Password provider is disabled in Firebase project "endless-quote-51ttq". Please sign in with Google or enable it in project settings.');
       } else if (authModalMode === 'login' && (err?.code === 'auth/invalid-credential' || err?.code === 'auth/user-not-found')) {
         setIsAccountNotFound(true);
-        setError('No account found matching this email, or incorrect password. If you are new, register an account.');
+        setError('No existing account found with this email, or incorrect password. Would you like to create this account now?');
       } else {
         setError(getFriendlyAuthErrorMessage(err));
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Instant 1-click account creation when user typed credentials in sign-in tab
+  const handleQuickRegister = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const displayName = name.trim() || email.split('@')[0] || 'Cinema Fan';
+      const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      try {
+        await updateProfile(cred.user, { displayName });
+      } catch {}
+      closeAuthModal();
+    } catch (createErr: any) {
+      console.warn('[AuthModal Quick Register Notice]', { code: createErr?.code, message: createErr?.message });
+      setError(getFriendlyAuthErrorMessage(createErr));
     } finally {
       setLoading(false);
     }
@@ -135,7 +154,7 @@ export const AuthModal: React.FC = () => {
         throw popupErr;
       }
     } catch (err: any) {
-      console.error('[AuthModal Google Auth Error]', { code: err?.code, message: err?.message, err });
+      console.warn('[AuthModal Google Auth Notice]', { code: err?.code, message: err?.message });
       setError(getFriendlyAuthErrorMessage(err));
     } finally {
       setGoogleLoading(false);
@@ -159,7 +178,7 @@ export const AuthModal: React.FC = () => {
         </button>
 
         {/* Header with Brand Logo */}
-        <div className="flex flex-col items-center text-center mb-6">
+        <div className="flex flex-col items-center text-center mb-5">
           <Logo size="md" showSubtitle={false} className="mb-2" />
           <h2 className="text-xl font-bold font-display text-white tracking-wide mt-2">
             {authModalMode === 'login' && 'Sign In to CINEXUS'}
@@ -172,6 +191,42 @@ export const AuthModal: React.FC = () => {
             {authModalMode === 'forgot_password' && 'Enter your registered email address and we will dispatch a secure reset link.'}
           </p>
         </div>
+
+        {/* Mode Switch Tabs: Sign In / Create Account */}
+        {authModalMode !== 'forgot_password' && (
+          <div className="flex p-1 bg-slate-900/90 rounded-2xl border border-slate-800 mb-5">
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setIsAccountNotFound(false);
+                openAuthModal('login');
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                authModalMode === 'login'
+                  ? 'bg-red-600 text-white shadow-md shadow-red-950/50'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setIsAccountNotFound(false);
+                openAuthModal('register');
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                authModalMode === 'register'
+                  ? 'bg-red-600 text-white shadow-md shadow-red-950/50'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Create Account
+            </button>
+          </div>
+        )}
 
         {/* Success Alert */}
         {successMessage && (
@@ -190,17 +245,30 @@ export const AuthModal: React.FC = () => {
             </div>
             
             {isAccountNotFound && (
-              <button
-                type="button"
-                onClick={() => {
-                  setError(null);
-                  setIsAccountNotFound(false);
-                  openAuthModal('register');
-                }}
-                className="mt-1 w-full py-2 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
-              >
-                <span>Register this account now</span>
-              </button>
+              <div className="space-y-1.5 mt-1">
+                <button
+                  type="button"
+                  onClick={handleQuickRegister}
+                  disabled={loading}
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Create Account with these Credentials</span>
+                </button>
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null);
+                      setIsAccountNotFound(false);
+                      openAuthModal('register');
+                    }}
+                    className="text-[11px] text-zinc-400 hover:text-white underline cursor-pointer"
+                  >
+                    Or switch to standard registration form
+                  </button>
+                </div>
+              </div>
             )}
 
             {isMethodDisabled && (

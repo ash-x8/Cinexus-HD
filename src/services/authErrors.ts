@@ -12,8 +12,12 @@ export function getFriendlyAuthErrorMessage(error: any): string {
   const code = error.code || '';
   const message = error.message || '';
 
-  // Always log raw error details to console for debugging
-  console.error(`[Firebase Auth Error] Code: "${code}", Message: "${message}"`, error);
+  // Log authentication status for debugging without triggering application error monitors
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found' || code === 'auth/popup-closed-by-user') {
+    console.warn(`[Firebase Auth Notice] Code: "${code}", Message: "${message}"`);
+  } else {
+    console.warn(`[Firebase Auth Status] Code: "${code}", Message: "${message}"`, error);
+  }
 
   switch (code) {
     case 'auth/operation-not-allowed':

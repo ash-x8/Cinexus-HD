@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { BRANDING } from '../../config/branding';
+import { useBrand } from '../../context/BrandContext';
 
 interface LogoProps {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
@@ -19,7 +20,8 @@ export const Logo: React.FC<LogoProps> = ({
   customLogoUrl
 }) => {
   const [hasError, setHasError] = useState(false);
-  const logoSrc = customLogoUrl || BRANDING.logoUrl;
+  const { branding } = useBrand();
+  const logoSrc = customLogoUrl || branding?.logoUrl || BRANDING.logoUrl;
 
   // Scale map for heights
   const scaleMap = {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Play, 
   Plus, 
@@ -7,17 +7,19 @@ import {
   Star, 
   Sparkles, 
   Volume2, 
-  Eye 
+  VolumeX,
+  Bookmark
 } from 'lucide-react';
 import { MovieItem, WatchProgress } from '../types';
+import { Link } from 'react-router-dom';
 
-interface MovieCardProps {
+export interface MovieCardProps {
   movie: MovieItem;
   rank?: number;
-  onPlayMovie: (movie: MovieItem) => void;
-  onOpenDetails: (movie: MovieItem) => void;
-  isInWatchlist: (movieId: string) => boolean;
-  onToggleWatchlist: (movie: MovieItem) => void;
+  onPlayMovie?: (movie: MovieItem) => void;
+  onOpenDetails?: (movie: MovieItem) => void;
+  isInWatchlist?: (movieId: string) => boolean;
+  onToggleWatchlist?: (movie: MovieItem) => void;
   watchProgress?: WatchProgress;
 }
 
@@ -31,23 +33,53 @@ export const MovieCard: React.FC<MovieCardProps> = ({
   watchProgress
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const inWatchlist = isInWatchlist(movie.id);
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const inWatchlist = isInWatchlist ? isInWatchlist(movie.id) : false;
+  const targetWatchUrl = `/watch/${movie.slug || movie.id}`;
+
+  // 3D Card Hover Tilt Micro-interaction
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const rotateX = ((y - centerY) / centerY) * -6; // max 6 deg
+    const rotateY = ((x - centerX) / centerX) * 6; // max 6 deg
+    setTilt({ x: rotateX, y: rotateY });
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+    setTilt({ x: 0, y: 0 });
+    setVideoLoaded(false);
+  };
 
   return (
     <div
+      ref={cardRef}
       id={`movie-card-${movie.id}`}
-      className="relative flex-shrink-0 group cursor-pointer transition-all duration-300 w-44 sm:w-52 md:w-56"
+      className="relative flex-shrink-0 group cursor-pointer w-44 sm:w-52 md:w-56 select-none transition-transform duration-300"
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      style={{
+        perspective: '1000px'
+      }}
     >
       {/* Top 10 Giant Rank Number */}
       {rank !== undefined && (
-        <div className="absolute -left-3 bottom-4 z-10 select-none pointer-events-none">
+        <div className="absolute -left-3 bottom-3 z-10 select-none pointer-events-none">
           <span 
-            className="text-7xl sm:text-8xl font-black font-cinema text-[#07090e] drop-shadow-[0_4px_8px_rgba(0,0,0,0.9)] stroke-cyan"
+            className="text-7xl sm:text-8xl font-black font-display text-black drop-shadow-[0_4px_12px_rgba(0,0,0,0.9)]"
             style={{
-              WebkitTextStroke: '2px #33445f',
-              textShadow: '0 0 20px rgba(0,0,0,0.8)'
+              WebkitTextStroke: '2px #D4AF37',
+              textShadow: '0 0 25px rgba(212,175,55,0.4)'
             }}
           >
             {rank}
@@ -55,129 +87,151 @@ export const MovieCard: React.FC<MovieCardProps> = ({
         </div>
       )}
 
-      {/* Main Poster Container */}
+      {/* Main Poster Container with 3D Tilt */}
       <div 
-        onClick={() => onOpenDetails(movie)}
-          className={`relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-900/80 border border-white/10 group-hover:border-red-500/60 shadow-lg group-hover:shadow-2xl group-hover:shadow-red-950/40 group-hover:-translate-y-1.5 transition-all duration-300 ${
+        style={{
+          transform: isHovered 
+            ? `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) scale3d(1.04, 1.04, 1.04)` 
+            : 'rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)',
+          transition: 'transform 0.15s ease-out, box-shadow 0.3s ease, border-color 0.3s ease'
+        }}
+        className={`relative aspect-[2/3] w-full rounded-2xl overflow-hidden bg-[#0e111a] border border-white/10 group-hover:border-[#D4AF37]/80 shadow-lg group-hover:shadow-[0_10px_35px_rgba(212,175,55,0.25)] ${
           rank ? 'ml-6' : ''
         }`}
       >
+        {/* Poster Image */}
         <img
-          src={movie.posterUrl}
+          src={movie.posterUrl || movie.posterPath || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=400&q=80'}
           alt={movie.title}
           loading="lazy"
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
         />
 
-        {/* Quality Badges */}
-        <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10">
-          <span className="px-2 py-0.5 rounded-md bg-slate-950/80 backdrop-blur-md text-[10px] font-bold text-cyan-300 border border-cyan-500/40 shadow">
-            {movie.quality}
+        {/* Hover Trailer / Video Preview */}
+        {isHovered && movie.demoVideoUrl && (
+          <div className="absolute inset-0 z-10 bg-black animate-fadeIn">
+            <video
+              src={movie.demoVideoUrl}
+              autoPlay
+              loop
+              muted={isMuted}
+              playsInline
+              onLoadedData={() => setVideoLoaded(true)}
+              className="w-full h-full object-cover"
+            />
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsMuted(!isMuted);
+              }}
+              className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white hover:text-[#D4AF37] transition-colors"
+            >
+              {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        )}
+
+        {/* Top Badges */}
+        <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-20 pointer-events-none">
+          <span className="px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-[10px] font-black text-[#D4AF37] border border-[#D4AF37]/40 shadow-sm uppercase tracking-wider">
+            {movie.quality || '4K HDR'}
           </span>
           {movie.hasDolbyAtmos && (
-            <span className="px-1.5 py-0.5 rounded bg-slate-950/80 backdrop-blur-md text-[9px] font-medium text-slate-300 border border-slate-700">
+            <span className="px-1.5 py-0.5 rounded bg-black/70 backdrop-blur-md text-[9px] font-bold text-zinc-300 border border-white/10 uppercase">
               ATMOS
             </span>
           )}
         </div>
 
         {/* Rating Badge */}
-        <div className="absolute top-2.5 right-2.5 z-10">
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-950/85 backdrop-blur-md border border-amber-400/40 text-amber-400 text-xs font-bold shadow">
+        <div className="absolute top-2.5 right-2.5 z-20 pointer-events-none">
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-amber-400/40 text-amber-400 text-xs font-bold shadow">
             <Star className="w-3 h-3 fill-amber-400" />
-            <span>{movie.rating}</span>
+            <span>{movie.rating || '8.8'}</span>
           </div>
         </div>
 
-        {/* Watch Progress Bar (if user watched before) */}
+        {/* Watch Progress Bar */}
         {watchProgress && (
-          <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-slate-950/90 z-20">
+          <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-black/80 z-20">
             <div 
-              className="h-full bg-gradient-to-r from-red-600 to-rose-500 rounded-r"
+              className="h-full bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-r"
               style={{ width: `${watchProgress.percentage}%` }}
             />
           </div>
         )}
 
-        {/* Dark Hover Overlay with Quick Action Buttons */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#07090e] via-[#07090e]/75 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3.5 z-20">
-          
-          <div className="space-y-2">
-            
-            {/* Title on Hover */}
-            <div className="text-sm font-bold text-white leading-tight line-clamp-1">
-              {movie.title}
-            </div>
+        {/* Cinematic Gradient Vignette */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent opacity-80 group-hover:opacity-60 transition-opacity pointer-events-none" />
 
-            {/* Micro Tags */}
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-300">
-              <span className="text-emerald-400 font-semibold">{movie.rottenTomatoesScore}%</span>
-              <span>•</span>
-              <span>{movie.releaseYear}</span>
-              <span>•</span>
-              <span className="truncate">{movie.duration}</span>
-            </div>
+        {/* Hover Quick Action Overlay */}
+        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black via-black/90 to-transparent z-20 flex flex-col justify-end opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
+          <h4 className="text-xs font-bold text-white truncate drop-shadow">{movie.title}</h4>
+          <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1">
+            <span>{movie.releaseYear || '2025'}</span>
+            <span className="text-[#D4AF37] font-semibold">{movie.genres?.[0] || 'Feature'}</span>
+          </div>
 
-            {/* Genres */}
-            <div className="flex flex-wrap gap-1 text-[10px] text-slate-400">
-              {movie.genres.slice(0, 2).map((g) => (
-                <span key={g} className="px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-300">
-                  {g}
-                </span>
-              ))}
-            </div>
+          <div className="flex items-center gap-2 mt-2.5">
+            <Link
+              to={targetWatchUrl}
+              onClick={(e) => {
+                if (onPlayMovie) {
+                  e.preventDefault();
+                  onPlayMovie(movie);
+                }
+              }}
+              className="flex-1 py-1.5 px-2.5 rounded-xl bg-gradient-to-r from-[#D4AF37] to-amber-500 hover:from-amber-400 hover:to-amber-500 text-black font-black text-[11px] flex items-center justify-center gap-1.5 transition-all shadow-md"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>Watch</span>
+            </Link>
 
-            {/* Quick Action Button Bar */}
-            <div className="flex items-center gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+            {onToggleWatchlist && (
               <button
-                id={`card-play-btn-${movie.id}`}
-                onClick={() => onPlayMovie(movie)}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-md shadow-red-900/50 active:scale-95 transition-all"
-              >
-                <Play className="w-3.5 h-3.5 fill-white" />
-                <span>Play</span>
-              </button>
-
-              <button
-                id={`card-watchlist-btn-${movie.id}`}
-                onClick={() => onToggleWatchlist(movie)}
-                className={`p-2 rounded-xl border transition-all ${
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleWatchlist(movie);
+                }}
+                className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${
                   inWatchlist
-                    ? 'bg-red-600/30 border-red-500 text-red-400'
-                    : 'bg-slate-800/90 border-slate-700 text-slate-200 hover:bg-slate-700'
+                    ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#D4AF37]'
+                    : 'bg-white/10 hover:bg-white/20 border-white/15 text-white'
                 }`}
                 title={inWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
               >
                 {inWatchlist ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
               </button>
+            )}
 
+            {onOpenDetails && (
               <button
-                id={`card-info-btn-${movie.id}`}
-                onClick={() => onOpenDetails(movie)}
-                className="p-2 rounded-xl bg-slate-800/90 border border-slate-700 text-slate-200 hover:bg-slate-700 transition-all"
-                title="Movie Details"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenDetails(movie);
+                }}
+                className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white transition-colors cursor-pointer"
+                title="View Full Details"
               >
                 <Info className="w-3.5 h-3.5" />
               </button>
-            </div>
-
+            )}
           </div>
-
         </div>
 
       </div>
 
-      {/* Card Footer Text under Poster */}
-      <div className={`mt-2 px-1 ${rank ? 'ml-6' : ''}`}>
-        <div className="text-xs sm:text-sm font-semibold text-slate-200 group-hover:text-red-400 transition-colors line-clamp-1">
+      {/* Title Below Card for Static Viewing */}
+      <div className="pt-2 px-1">
+        <h3 className="text-xs font-bold text-slate-200 group-hover:text-[#D4AF37] truncate transition-colors">
           {movie.title}
-        </div>
-        <div className="text-[11px] text-slate-400 flex items-center justify-between mt-0.5">
-          <span>{movie.genres[0]}</span>
-          <span className="text-slate-500">{movie.releaseYear}</span>
-        </div>
+        </h3>
+        <p className="text-[11px] text-zinc-500 truncate mt-0.5">
+          {movie.releaseYear || '2025'} · {movie.genres?.slice(0, 2).join(', ') || 'Cinema'}
+        </p>
       </div>
-
     </div>
   );
 };
+
+export default MovieCard;

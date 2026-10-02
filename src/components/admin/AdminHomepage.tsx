@@ -45,6 +45,8 @@ import { useAuth } from '../../context/AuthContext';
 interface SortableRailItemProps {
   sec: HomepageSectionConfig;
   index: number;
+  isSelected: boolean;
+  onToggleSelect: (id: string) => void;
   onToggleEnable: (sec: HomepageSectionConfig) => void;
   onEdit: (sec: HomepageSectionConfig) => void;
   onDelete: (id: string, title: string) => void;
@@ -53,6 +55,8 @@ interface SortableRailItemProps {
 const SortableRailItem: React.FC<SortableRailItemProps> = ({
   sec,
   index,
+  isSelected,
+  onToggleSelect,
   onToggleEnable,
   onEdit,
   onDelete
@@ -80,12 +84,24 @@ const SortableRailItem: React.FC<SortableRailItemProps> = ({
       className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 select-none ${
         isDragging
           ? 'bg-[#181C28] border-amber-500 shadow-2xl scale-[1.02]'
+          : isSelected
+          ? 'bg-[#181c2b] border-amber-500/60 shadow-lg'
           : sec.enabled
           ? 'bg-zinc-950 border-white/10 shadow-sm'
           : 'bg-zinc-950/40 border-white/5 opacity-60'
       }`}
     >
       <div className="flex items-center gap-3">
+        {/* Bulk Action Checkbox */}
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggleSelect(sec.id)}
+          className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+          title={`Select ${sec.title}`}
+          aria-label={`Select ${sec.title}`}
+        />
+
         {/* Visual Drag Handle */}
         <button
           type="button"
@@ -160,6 +176,8 @@ export const AdminHomepage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [selectedRailIds, setSelectedRailIds] = useState<string[]>([]);
+  const [isBulkActioning, setIsBulkActioning] = useState(false);
 
   // Setup dnd-kit sensors
   const sensors = useSensors(
@@ -246,12 +264,113 @@ export const AdminHomepage: React.FC = () => {
     try {
       await deleteHomepageSection(id);
       setSections((prev) => prev.filter((s) => s.id !== id));
+      setSelectedRailIds((prev) => prev.filter((item) => item !== id));
       await logAdminAction(user?.email || 'admin', 'DELETE_RAIL', 'homepage', id, `Deleted homepage rail "${title}"`);
       setSaveNotice(`Rail "${title}" removed.`);
       setTimeout(() => setSaveNotice(null), 3000);
     } catch (err: any) {
       console.error('Delete rail error:', err);
       setSaveError(`Failed to delete rail: ${err.message || 'Firestore error'}`);
+    }
+  };
+
+  // Bulk Actions
+  const handleToggleSelect = (id: string) => {
+    setSelectedRailIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedRailIds.length === sections.length) {
+      setSelectedRailIds([]);
+    } else {
+      setSelectedRailIds(sections.map((s) => s.id));
+    }
+  };
+
+  const handleBulkEnable = async () => {
+    if (selectedRailIds.length === 0) return;
+    setIsBulkActioning(true);
+    try {
+      for (const id of selectedRailIds) {
+        const target = sections.find((s) => s.id === id);
+        if (target) {
+          await saveHomepageSection({ ...target, enabled: true });
+        }
+      }
+      setSections((prev) =>
+        prev.map((s) => (selectedRailIds.includes(s.id) ? { ...s, enabled: true } : s))
+      );
+      setSaveNotice(`Enabled ${selectedRailIds.length} selected rails.`);
+      setTimeout(() => setSaveNotice(null), 3000);
+      await logAdminAction(
+        user?.email || 'admin',
+        'BULK_ENABLE_RAILS',
+        'homepage',
+        selectedRailIds.join(','),
+        `Bulk enabled ${selectedRailIds.length} homepage rails`
+      );
+    } catch (err: any) {
+      setSaveError(`Bulk enable failed: ${err.message}`);
+    } finally {
+      setIsBulkActioning(false);
+    }
+  };
+
+  const handleBulkDisable = async () => {
+    if (selectedRailIds.length === 0) return;
+    setIsBulkActioning(true);
+    try {
+      for (const id of selectedRailIds) {
+        const target = sections.find((s) => s.id === id);
+        if (target) {
+          await saveHomepageSection({ ...target, enabled: false });
+        }
+      }
+      setSections((prev) =>
+        prev.map((s) => (selectedRailIds.includes(s.id) ? { ...s, enabled: false } : s))
+      );
+      setSaveNotice(`Disabled ${selectedRailIds.length} selected rails.`);
+      setTimeout(() => setSaveNotice(null), 3000);
+      await logAdminAction(
+        user?.email || 'admin',
+        'BULK_DISABLE_RAILS',
+        'homepage',
+        selectedRailIds.join(','),
+        `Bulk disabled ${selectedRailIds.length} homepage rails`
+      );
+    } catch (err: any) {
+      setSaveError(`Bulk disable failed: ${err.message}`);
+    } finally {
+      setIsBulkActioning(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedRailIds.length === 0) return;
+    if (!window.confirm(`Permanently delete all ${selectedRailIds.length} selected rails?`)) return;
+
+    setIsBulkActioning(true);
+    try {
+      for (const id of selectedRailIds) {
+        await deleteHomepageSection(id);
+      }
+      setSections((prev) => prev.filter((s) => !selectedRailIds.includes(s.id)));
+      setSaveNotice(`Deleted ${selectedRailIds.length} rails.`);
+      setSelectedRailIds([]);
+      setTimeout(() => setSaveNotice(null), 3000);
+      await logAdminAction(
+        user?.email || 'admin',
+        'BULK_DELETE_RAILS',
+        'homepage',
+        selectedRailIds.join(','),
+        `Bulk deleted ${selectedRailIds.length} homepage rails`
+      );
+    } catch (err: any) {
+      setSaveError(`Bulk delete failed: ${err.message}`);
+    } finally {
+      setIsBulkActioning(false);
     }
   };
 
@@ -360,6 +479,57 @@ export const AdminHomepage: React.FC = () => {
         </div>
       )}
 
+      {/* Bulk Action Toolbar */}
+      {sections.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-[#12151E] border border-amber-500/20 text-xs shadow-lg">
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={sections.length > 0 && selectedRailIds.length === sections.length}
+                onChange={handleSelectAll}
+                className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+              />
+              <span className="font-bold text-white">Select All Rails</span>
+            </label>
+            {selectedRailIds.length > 0 && (
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[11px] border border-amber-500/30">
+                {selectedRailIds.length} Selected
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBulkEnable}
+              disabled={selectedRailIds.length === 0 || isBulkActioning}
+              className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Eye className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Enable Selected</span>
+            </button>
+
+            <button
+              onClick={handleBulkDisable}
+              disabled={selectedRailIds.length === 0 || isBulkActioning}
+              className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-zinc-300 font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <EyeOff className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Disable Selected</span>
+            </button>
+
+            <button
+              onClick={handleBulkDelete}
+              disabled={selectedRailIds.length === 0 || isBulkActioning}
+              className="px-3 py-1.5 rounded-xl bg-red-600/15 hover:bg-red-600/25 border border-red-500/30 text-red-400 font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+              <span>Delete Selected</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Sections List with dnd-kit Drag and Drop */}
       <div className="space-y-3">
         {loading ? (
@@ -387,6 +557,8 @@ export const AdminHomepage: React.FC = () => {
                     key={sec.id}
                     sec={sec}
                     index={idx}
+                    isSelected={selectedRailIds.includes(sec.id)}
+                    onToggleSelect={handleToggleSelect}
                     onToggleEnable={handleToggleEnable}
                     onEdit={(s) => setEditingSec({ ...s })}
                     onDelete={handleDelete}

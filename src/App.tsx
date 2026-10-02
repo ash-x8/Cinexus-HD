@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { PlayerProvider } from './context/PlayerContext';
+import { BrandProvider } from './context/BrandContext';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
@@ -16,7 +17,7 @@ import { ContentDetailPage } from './pages/ContentDetailPage';
 import { WatchPage } from './pages/WatchPage';
 import { WatchlistPage } from './pages/WatchlistPage';
 import { HistoryPage } from './pages/HistoryPage';
-import { ProfilePage } from './pages/ProfilePage';
+import { UserProfile } from './components/UserProfile';
 import { AboutPage, ContactPage, PrivacyPage, TermsPage } from './pages/StaticPages';
 import { NotFoundPage } from './pages/NotFoundPage';
 
@@ -27,15 +28,16 @@ export const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <PlayerProvider>
-          <BrowserRouter>
-            <Suspense
-              fallback={
-                <div className="min-h-screen bg-[#06080c] flex items-center justify-center">
-                  <div className="w-10 h-10 rounded-full border-2 border-red-600/30 border-t-red-600 animate-spin" />
-                </div>
-              }
-            >
+        <BrandProvider>
+          <PlayerProvider>
+            <BrowserRouter>
+              <Suspense
+                fallback={
+                  <div className="min-h-screen bg-[#06080c] flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full border-2 border-[#D4AF37]/30 border-t-[#D4AF37] animate-spin" />
+                  </div>
+                }
+              >
               <Routes>
                 {/* 1. Public Cinema Routes */}
                 <Route
@@ -130,7 +132,7 @@ export const App: React.FC = () => {
                   path="/profile"
                   element={
                     <PublicLayout>
-                      <ProfilePage />
+                      <UserProfile />
                     </PublicLayout>
                   }
                 />
@@ -183,7 +185,8 @@ export const App: React.FC = () => {
             </Suspense>
           </BrowserRouter>
         </PlayerProvider>
-      </AuthProvider>
-    </ErrorBoundary>
+      </BrandProvider>
+    </AuthProvider>
+  </ErrorBoundary>
   );
 };

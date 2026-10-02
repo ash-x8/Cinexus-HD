@@ -27,6 +27,7 @@ import { useAuth } from '../../context/AuthContext';
 
 export type AdminTab =
   | 'dashboard'
+  | 'branding'
   | 'movies'
   | 'series'
   | 'sources'
@@ -54,6 +55,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ activeTab, onTabChange
 
   const navItems: { id: AdminTab; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'branding', label: 'Brand Settings', icon: Sparkles },
     { id: 'movies', label: 'Feature Films', icon: Film },
     { id: 'series', label: 'TV & Anime Series', icon: Tv },
     { id: 'sources', label: 'Streaming Sources', icon: Radio },

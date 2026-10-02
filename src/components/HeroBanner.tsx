@@ -8,16 +8,18 @@ import {
   VolumeX, 
   Star, 
   Sparkles, 
-  Clapperboard, 
   ChevronRight, 
-  ChevronLeft 
+  ChevronLeft,
+  Film,
+  Tv
 } from 'lucide-react';
 import { MovieItem } from '../types';
+import { Link } from 'react-router-dom';
 
-interface HeroBannerProps {
+export interface HeroBannerProps {
   featuredMovies: MovieItem[];
-  onPlayMovie: (movie: MovieItem) => void;
-  onOpenDetails: (movie: MovieItem) => void;
+  onPlayMovie?: (movie: MovieItem) => void;
+  onOpenDetails?: (movie: MovieItem) => void;
   isInWatchlist: (movieId: string) => boolean;
   onToggleWatchlist: (movie: MovieItem) => void;
 }
@@ -36,11 +38,12 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   const currentMovie = featuredMovies[currentIndex] || featuredMovies[0];
 
   useEffect(() => {
+    if (featuredMovies.length <= 1) return;
     const timer = setInterval(() => {
       if (!isTrailerActive) {
         setCurrentIndex((prev) => (prev + 1) % featuredMovies.length);
       }
-    }, 9000);
+    }, 8500);
     return () => clearInterval(timer);
   }, [featuredMovies.length, isTrailerActive]);
 
@@ -58,8 +61,10 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
     setIsTrailerActive(false);
   };
 
+  const targetWatchUrl = `/watch/${currentMovie.slug || currentMovie.id}`;
+
   return (
-    <div id="hero-banner" className="relative w-full h-[80vh] min-h-[600px] max-h-[850px] overflow-hidden select-none">
+    <div id="hero-banner" className="relative w-full h-[85vh] min-h-[620px] max-h-[880px] overflow-hidden select-none bg-[#07090e]">
       
       {/* Background Backdrop or Live Video Preview */}
       <div className="absolute inset-0 z-0">
@@ -74,199 +79,159 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
           />
         ) : (
           <img
-            src={currentMovie.backdropUrl}
+            src={currentMovie.backdropUrl || currentMovie.backdropPath || currentMovie.posterUrl}
             alt={currentMovie.title}
             className="w-full h-full object-cover object-center transform scale-105 transition-all duration-1000 ease-out"
           />
         )}
 
-        {/* Ambient Dark Gradient Overlays for High Contrast Readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#07090e] via-[#07090e]/60 to-[#07090e]/30" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#07090e] via-[#07090e]/80 to-transparent w-full md:w-3/4" />
-        <div className="absolute inset-0 bg-radial-at-c from-transparent via-transparent to-[#07090e]/80" />
+        {/* Ambient Dark Cinema Overlays */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#07090e] via-[#07090e]/70 to-[#07090e]/30" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#07090e] via-[#07090e]/85 to-transparent w-full md:w-3/4" />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-[#D4AF37]/10 blur-3xl pointer-events-none" />
       </div>
 
       {/* Content Container */}
       <div className="relative z-10 max-w-7xl mx-auto h-full flex flex-col justify-end pb-16 sm:pb-20 px-4 sm:px-6 lg:px-8">
         
-        <div className="max-w-2xl space-y-4">
+        <div className="max-w-2xl space-y-4 animate-fadeIn">
           
-          {/* Release / Tech Badges */}
+          {/* Release / Tech Badges in Dark Gold */}
           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-            <span className="px-2.5 py-1 rounded-md bg-red-600 text-white shadow-md shadow-red-900/50 uppercase tracking-wider text-[11px] font-bold">
-              ★ CINEXUS SPOTLIGHT
+            <span className="px-3 py-1 rounded-full bg-gradient-to-r from-[#D4AF37] to-amber-600 text-black shadow-lg shadow-amber-950/60 uppercase tracking-widest text-[10px] font-black flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-black" />
+              <span>CINEXUS PREMIERE</span>
             </span>
-            <span className="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-cyan-300 font-mono">
-              {currentMovie.quality}
+
+            <span className="px-2.5 py-0.5 rounded-lg bg-black/60 backdrop-blur-md border border-[#D4AF37]/40 text-[#D4AF37] font-bold text-[11px] uppercase">
+              {currentMovie.quality || '4K ULTRA HD'}
             </span>
+
             {currentMovie.hasDolbyAtmos && (
-              <span className="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-200">
-                Dolby Atmos
+              <span className="px-2 py-0.5 rounded-lg bg-black/60 backdrop-blur-md border border-white/15 text-zinc-300 font-mono text-[10px] uppercase">
+                DOLBY ATMOS
               </span>
             )}
-            {currentMovie.hasHDR10Plus && (
-              <span className="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-amber-300 font-medium">
-                HDR10+
-              </span>
-            )}
-            <span className="px-2 py-0.5 rounded bg-slate-900/90 border border-slate-700 text-slate-300">
-              {currentMovie.contentRating}
+
+            <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-black/60 backdrop-blur-md border border-amber-500/30 text-amber-400 text-xs font-bold">
+              <Star className="w-3.5 h-3.5 fill-amber-400" />
+              <span>{currentMovie.rating || '8.9'}</span>
+            </div>
+          </div>
+
+          {/* Title with Gold-Trimmed Display Typography */}
+          <h1 className="text-3xl sm:text-5xl md:text-6xl font-black text-white font-display tracking-tight leading-[1.1] drop-shadow-2xl">
+            {currentMovie.title}
+          </h1>
+
+          {/* Meta Info */}
+          <div className="flex items-center gap-3 text-xs text-zinc-400 font-medium">
+            <span>{currentMovie.releaseYear || '2025'}</span>
+            <span>·</span>
+            <span className="px-1.5 py-0.5 rounded bg-white/10 text-white font-bold text-[10px]">
+              {currentMovie.contentRating || '16+'}
+            </span>
+            <span>·</span>
+            <span>{currentMovie.duration || currentMovie.runtime || '2h 14m'}</span>
+            <span>·</span>
+            <span className="text-[#D4AF37] font-semibold">
+              {currentMovie.genres?.slice(0, 3).join(', ') || 'Action, Sci-Fi'}
             </span>
           </div>
 
-          {/* Title & Tagline */}
-          <div className="space-y-1">
-            <h1 className="text-3xl sm:text-5xl md:text-6xl font-black font-cinema tracking-tight text-white drop-shadow-2xl leading-none">
-              {currentMovie.title}
-            </h1>
-            {currentMovie.tagline && (
-              <p className="text-sm sm:text-base text-red-400 font-medium italic drop-shadow">
-                "{currentMovie.tagline}"
-              </p>
-            )}
-          </div>
-
-          {/* Metadata Row: Rating, Year, Duration, Genres */}
-          <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-slate-300">
-            <div className="flex items-center gap-1 text-amber-400 font-bold bg-amber-400/10 border border-amber-400/30 px-2 py-0.5 rounded-md">
-              <Star className="w-4 h-4 fill-amber-400" />
-              <span>{currentMovie.rating}</span>
-              <span className="text-slate-400 text-xs font-normal">({currentMovie.votesCount})</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-emerald-400 font-semibold bg-emerald-400/10 border border-emerald-400/30 px-2 py-0.5 rounded-md">
-              <span>🍅 {currentMovie.rottenTomatoesScore}% Fresh</span>
-            </div>
-            <span>•</span>
-            <span className="font-semibold text-slate-200">{currentMovie.releaseYear}</span>
-            <span>•</span>
-            <span>{currentMovie.duration}</span>
-            <span>•</span>
-            <div className="flex items-center gap-1.5">
-              {currentMovie.genres.slice(0, 3).map((g) => (
-                <span key={g} className="text-slate-300 bg-slate-800/60 px-2 py-0.5 rounded text-[11px]">
-                  {g}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Overview / Synopsis */}
-          <p className="text-xs sm:text-sm text-slate-300 line-clamp-3 leading-relaxed max-w-xl drop-shadow">
-            {currentMovie.overview}
+          {/* Plot Overview */}
+          <p className="text-xs sm:text-sm text-zinc-300 line-clamp-3 leading-relaxed max-w-xl drop-shadow">
+            {currentMovie.overview || currentMovie.tagline || 'Experience high-bitrate 4K streaming playback with lossless multichannel audio.'}
           </p>
 
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-3 pt-2">
-            
-            {/* Play Movie / Trailer */}
-            <button
-              id="hero-play-main-btn"
-              onClick={() => onPlayMovie(currentMovie)}
-              className="flex items-center gap-2.5 px-6 py-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-bold text-sm shadow-xl shadow-red-900/40 hover:shadow-red-600/50 hover:scale-[1.02] active:scale-[0.98] transition-all"
+          {/* Interactive CTA Action Row */}
+          <div className="flex flex-wrap items-center gap-3 pt-3">
+            <Link
+              to={targetWatchUrl}
+              onClick={(e) => {
+                if (onPlayMovie) {
+                  e.preventDefault();
+                  onPlayMovie(currentMovie);
+                }
+              }}
+              className="px-6 sm:px-8 py-3.5 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-amber-500 hover:from-amber-400 hover:to-amber-500 text-black font-black text-xs uppercase tracking-wider flex items-center gap-2.5 transition-all shadow-xl shadow-amber-950/50 hover:scale-105 cursor-pointer"
             >
-              <Play className="w-5 h-5 fill-white" />
-              <span>Watch in 4K</span>
+              <Play className="w-4 h-4 fill-current ml-0.5" />
+              <span>Stream in 4K</span>
+            </Link>
+
+            <button
+              onClick={() => onToggleWatchlist(currentMovie)}
+              className={`px-5 py-3.5 rounded-2xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 border transition-all cursor-pointer ${
+                inWatchlist
+                  ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#D4AF37]'
+                  : 'bg-black/60 hover:bg-black/80 border-white/20 text-white hover:border-[#D4AF37]/50'
+              }`}
+            >
+              {inWatchlist ? <Check className="w-4 h-4 text-[#D4AF37]" /> : <Plus className="w-4 h-4" />}
+              <span>{inWatchlist ? 'In Watchlist' : 'Add to Watchlist'}</span>
             </button>
 
-            {/* Preview Trailer in Background Toggle */}
-            {currentMovie.demoVideoUrl && (
+            {onOpenDetails && (
               <button
-                id="hero-preview-toggle-btn"
-                onClick={() => setIsTrailerActive(!isTrailerActive)}
-                className={`flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-semibold transition-all ${
-                  isTrailerActive 
-                    ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300'
-                    : 'bg-slate-900/80 border-slate-700 text-slate-200 hover:bg-slate-800 hover:text-white'
-                }`}
+                onClick={() => onOpenDetails(currentMovie)}
+                className="p-3.5 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 text-white transition-colors cursor-pointer"
+                title="View Full Film Details"
               >
-                <Clapperboard className="w-4 h-4 text-cyan-400" />
-                <span>{isTrailerActive ? 'Stop Preview' : 'Teaser Preview'}</span>
+                <Info className="w-4 h-4" />
               </button>
             )}
 
-            {/* Watchlist Toggle */}
-            <button
-              id="hero-watchlist-toggle-btn"
-              onClick={() => onToggleWatchlist(currentMovie)}
-              className={`p-3 rounded-xl border transition-all ${
-                inWatchlist 
-                  ? 'bg-red-600/30 border-red-500 text-red-400' 
-                  : 'bg-slate-900/80 border-slate-700 text-slate-200 hover:bg-slate-800 hover:text-white'
-              }`}
-              title={inWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
-            >
-              {inWatchlist ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-            </button>
-
-            {/* Details Modal Trigger */}
-            <button
-              id="hero-details-btn"
-              onClick={() => onOpenDetails(currentMovie)}
-              className="p-3 rounded-xl bg-slate-900/80 border border-slate-700 text-slate-200 hover:bg-slate-800 hover:text-white transition-all"
-              title="Full Details & Cast"
-            >
-              <Info className="w-5 h-5" />
-            </button>
-
+            {currentMovie.demoVideoUrl && (
+              <button
+                onClick={() => setIsTrailerActive(!isTrailerActive)}
+                className="p-3.5 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 text-white transition-colors cursor-pointer hidden sm:flex items-center gap-2 text-xs font-bold"
+              >
+                <Film className="w-4 h-4 text-[#D4AF37]" />
+                <span>{isTrailerActive ? 'Close Trailer' : 'Preview Trailer'}</span>
+              </button>
+            )}
           </div>
 
         </div>
 
       </div>
 
-      {/* Right Controls: Mute Toggle and Slide Navigation */}
-      <div className="absolute bottom-16 right-4 sm:right-8 z-20 flex items-center gap-3">
-        
-        {isTrailerActive && (
+      {/* Slide Navigation Controls */}
+      {featuredMovies.length > 1 && (
+        <div className="absolute bottom-8 right-6 z-20 flex items-center gap-2">
           <button
-            id="hero-mute-toggle-btn"
-            onClick={() => setIsMuted(!isMuted)}
-            className="p-2.5 rounded-full bg-slate-900/80 border border-slate-700 text-slate-200 hover:text-white backdrop-blur-sm transition-all"
-            title={isMuted ? 'Unmute' : 'Mute'}
-          >
-            {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-          </button>
-        )}
-
-        <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800/80 p-1.5 rounded-full backdrop-blur-md">
-          <button
-            id="hero-prev-slide-btn"
             onClick={prevSlide}
-            className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-2.5 rounded-full bg-black/60 hover:bg-black/90 border border-white/15 text-white hover:text-[#D4AF37] transition-all cursor-pointer backdrop-blur-md"
+            title="Previous Featured Film"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-
-          {/* Dots Indicator */}
-          <div className="flex items-center gap-1 px-1">
-            {featuredMovies.map((m, idx) => (
+          
+          <div className="flex gap-1.5 px-2">
+            {featuredMovies.slice(0, 6).map((_, idx) => (
               <button
-                key={m.id}
-                id={`hero-indicator-${idx}`}
-                onClick={() => {
-                  setCurrentIndex(idx);
-                  setIsTrailerActive(false);
-                }}
-                className={`transition-all duration-300 rounded-full ${
-                  idx === currentIndex 
-                    ? 'w-6 h-2 bg-red-600' 
-                    : 'w-2 h-2 bg-slate-600 hover:bg-slate-400'
+                key={idx}
+                onClick={() => setCurrentIndex(idx)}
+                className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                  currentIndex === idx ? 'w-6 bg-[#D4AF37]' : 'w-1.5 bg-white/30 hover:bg-white/60'
                 }`}
+                aria-label={`Slide ${idx + 1}`}
               />
             ))}
           </div>
 
           <button
-            id="hero-next-slide-btn"
             onClick={nextSlide}
-            className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-2.5 rounded-full bg-black/60 hover:bg-black/90 border border-white/15 text-white hover:text-[#D4AF37] transition-all cursor-pointer backdrop-blur-md"
+            title="Next Featured Film"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
-
-      </div>
-
+      )}
     </div>
   );
 };
+
+export default HeroBanner;

@@ -124,10 +124,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       }
       onClose();
     } catch (err: any) {
-      console.error('[LoginModal Email Auth Error]', { code: err?.code, message: err?.message, err });
+      console.warn('[LoginModal Email Auth Status]', { code: err?.code, message: err?.message });
       if (err?.code === 'auth/operation-not-allowed') {
         setIsMethodDisabled(true);
-        setError('Email/Password sign-in is disabled in your Firebase Console. Please use "Continue with Google" below.');
+        setError('Email/Password provider is disabled in Firebase project "endless-quote-51ttq". Please use "Continue with Google" below.');
+      } else if (mode === 'login' && (err?.code === 'auth/invalid-credential' || err?.code === 'auth/user-not-found')) {
+        setError('Invalid email or password. If you do not have an account yet, click "Join CINEXUS" below to register.');
       } else {
         setError(err?.code || err?.message || 'Authentication failed.');
       }

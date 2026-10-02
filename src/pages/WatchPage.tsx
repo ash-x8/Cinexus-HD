@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getMovieBySlugOrId, getSeriesBySlugOrId, getEpisodesBySeries } from '../services/firestore';
 import { tmdbService } from '../services/tmdb';
 import { MovieItem, EpisodeItem } from '../types';
-import { CinexusPlayer } from '../components/player/CinexusPlayer';
+import { CinexusPlayer } from '../components/CinexusPlayer';
 import { ArrowLeft, Bookmark, Star, Tv, Play, Check } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 

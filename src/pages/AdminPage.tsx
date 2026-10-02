@@ -9,6 +9,7 @@ import { AdminSeries } from '../components/admin/AdminSeries';
 import { AdminSources } from '../components/admin/AdminSources';
 import { AdminMedia } from '../components/admin/AdminMedia';
 import { AdminHomepage } from '../components/admin/AdminHomepage';
+import { AdminBrandSettings } from '../components/admin/AdminBrandSettings';
 import { AdminSettings } from '../components/admin/AdminSettings';
 import { AdminAudit } from '../components/admin/AdminAudit';
 import { AdminActivityLogs } from '../components/admin/AdminActivityLogs';
@@ -22,6 +23,7 @@ export const AdminPage: React.FC = () => {
   // Match URL path to active tab
   const getTabFromPath = (): AdminTab => {
     const subpath = location.pathname.replace(/^\/admin\/?/, '').split('/')[0];
+    if (subpath === 'branding') return 'branding';
     if (subpath === 'tv' || subpath === 'series') return 'series';
     if (subpath === 'movies') return 'movies';
     if (subpath === 'sources') return 'sources';
@@ -97,6 +99,7 @@ export const AdminPage: React.FC = () => {
   return (
     <AdminLayout activeTab={activeTab} onTabChange={handleTabChange}>
       {activeTab === 'dashboard' && <AdminDashboard onNavigate={handleTabChange} />}
+      {activeTab === 'branding' && <AdminBrandSettings />}
       {activeTab === 'movies' && <AdminMovies />}
       {activeTab === 'series' && <AdminSeries />}
       {activeTab === 'sources' && <AdminSources />}

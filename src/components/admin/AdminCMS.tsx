@@ -140,9 +140,11 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
       }
       onSuccess();
     } catch (err: any) {
-      console.error('[AdminCMS Email Login Error]', { code: err?.code, message: err?.message, err });
+      console.warn('[AdminCMS Email Login Status]', { code: err?.code, message: err?.message });
       if (err?.code === 'auth/operation-not-allowed') {
-        setError('Email/Password sign-in is disabled in your Firebase Console. Please use "Continue with Google Administrator" above.');
+        setError('Email/Password provider is disabled in Firebase project "endless-quote-51ttq". Please use "Continue with Google Administrator" above.');
+      } else if (err?.code === 'auth/invalid-credential' || err?.code === 'auth/user-not-found') {
+        setError('Invalid administrator email or password. You can also sign in with your Google account above.');
       } else {
         setError(err?.code || err?.message || 'Login failed.');
       }
