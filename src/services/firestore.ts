@@ -53,36 +53,60 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 /**
- * Recursively cleans and sanitizes data objects before passing them to Cloud Firestore.
- * Firestore strictly rejects undefined field values. This converts any `undefined` value
- * to a safe fallback (e.g. empty string `""` or null) and recursively sanitizes nested objects and arrays.
+ * Timeout wrapper ensuring Firestore operations never hang indefinitely.
  */
-export const sanitizeData = <T extends Record<string, any> | any>(data: T): T => {
-  if (data === undefined) {
+export const withTimeout = <T>(promise: Promise<T>, ms: number = 10000, errorMsg?: string): Promise<T> => {
+  let timer: any;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(errorMsg || `Firestore operation timed out after ${ms / 1000}s.`));
+    }, ms);
+  });
+
+  return Promise.race([
+    promise.then((res) => {
+      clearTimeout(timer);
+      return res;
+    }),
+    timeoutPromise
+  ]);
+};
+
+/**
+ * Clean data sanitization function that converts all undefined values
+ * to empty strings "" or safe defaults before setDoc / addDoc calls.
+ */
+export const sanitizeMovieData = <T extends Record<string, any> | any>(data: T): T => {
+  if (data === undefined || data === null) {
     return "" as any;
   }
-  if (data === null || typeof data !== 'object') {
-    return data;
-  }
-  if (data instanceof Date) {
+  if (typeof data !== 'object' || data instanceof Date) {
     return data;
   }
   if (Array.isArray(data)) {
-    return data.map((item) => sanitizeData(item)) as any;
+    return data.map((item) =>
+      item !== null && typeof item === 'object' && !(item instanceof Date)
+        ? sanitizeMovieData(item)
+        : item === undefined ? "" : item
+    ) as any;
   }
 
-  return Object.fromEntries(
-    Object.entries(data).map(([key, value]) => {
-      if (value === undefined) {
-        return [key, ""];
-      }
-      if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
-        return [key, sanitizeData(value)];
-      }
-      return [key, value];
-    })
-  ) as T;
+  const cleaned: Record<string, any> = {};
+  Object.keys(data).forEach((key) => {
+    const val = (data as any)[key];
+    if (val === undefined) {
+      cleaned[key] = "";
+    } else if (val !== null && typeof val === 'object' && !(val instanceof Date)) {
+      cleaned[key] = sanitizeMovieData(val);
+    } else {
+      cleaned[key] = val;
+    }
+  });
+  return cleaned as T;
 };
+
+// Backwards compatibility alias
+export const sanitizeData = sanitizeMovieData;
 
 export const COLLECTIONS = {
   MOVIES: 'movies',
@@ -193,10 +217,15 @@ export async function saveMovie(movie: MovieItem): Promise<void> {
     createdAt: movie.createdAt || new Date().toISOString()
   };
 
-  const cleanData = sanitizeData(data);
+  const cleanData = sanitizeMovieData(data);
 
   try {
-    await setDoc(doc(db, COLLECTIONS.MOVIES, id), cleanData, { merge: true });
+    const docRef = doc(db, COLLECTIONS.MOVIES, id);
+    await withTimeout(
+      setDoc(docRef, cleanData, { merge: true }),
+      10000,
+      `Failed to save movie "${cleanData.title}": Firestore request timed out after 10 seconds. Check permissions or network.`
+    );
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.MOVIES}/${id}`);
   }

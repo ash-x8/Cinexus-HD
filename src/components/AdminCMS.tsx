@@ -1,1 +1,1 @@
-export { AdminCMS, default, sanitizeData } from './admin/AdminCMS';
+export { AdminCMS, default, sanitizeData, sanitizeMovieData } from './admin/AdminCMS';

@@ -25,7 +25,7 @@ import {
   User,
   Video
 } from 'lucide-react';
-import { getMovies, saveMovie, deleteMovie, bulkSaveMovies, logAdminAction, sanitizeData } from '../../services/firestore';
+import { getMovies, saveMovie, deleteMovie, bulkSaveMovies, logAdminAction, sanitizeData, sanitizeMovieData } from '../../services/firestore';
 import { tmdbService } from '../../services/tmdb';
 import { MovieItem, VideoSource, ServerEmbeds } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -178,22 +178,27 @@ export const AdminMovies: React.FC = () => {
         updatedAt: new Date().toISOString()
       };
 
-      const movieToSave = sanitizeData(rawMovie) as MovieItem;
+      const movieToSave = sanitizeMovieData(rawMovie) as MovieItem;
 
       await saveMovie(movieToSave);
-      await logAdminAction(
+
+      // Async audit log without blocking UI state
+      logAdminAction(
         user?.email || 'admin',
         'SAVE_MOVIE',
         'movies',
         movieToSave.id,
         `Saved movie "${movieToSave.title}"`
-      );
+      ).catch((err) => console.warn('[Audit Log] Failed to log save action:', err));
 
       setIsEditorOpen(false);
       setNotice(`"${movieToSave.title}" saved successfully to Cloud Firestore.`);
       setTimeout(() => setNotice(null), 3500);
-      await loadMoviesList();
+
+      // Async refresh movies list
+      loadMoviesList().catch(console.warn);
     } catch (e: any) {
+      console.error('[AdminMovies handleSaveMovie error]:', e);
       alert(`Save error: ${e.message}`);
     } finally {
       setIsSaving(false);

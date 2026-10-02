@@ -37,11 +37,11 @@ export const firebaseConfig = {
 // 1. Initialize Firebase App instance singleton
 export const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// 2. Initialize Firebase App Check (Google reCAPTCHA v3)
-export const RECAPTCHA_SITE_KEY = "6LffgNgtAAAAAPEJV9c-d_Bxuv6iV45jfh35oxRf";
+// 2. Initialize Firebase App Check (Google reCAPTCHA v3) only if a valid site key is configured
+export const RECAPTCHA_SITE_KEY = firebaseAppletConfig.recaptchaSiteKey || "";
 
 let appCheckInstance: AppCheck | null = null;
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && RECAPTCHA_SITE_KEY && RECAPTCHA_SITE_KEY.trim() !== "") {
   try {
     // Enable debug token for local and staging preview domains if testing off the primary production origin
     const host = window.location.hostname;
