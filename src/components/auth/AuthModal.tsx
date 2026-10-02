@@ -1,9 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { auth, googleProvider } from '../../firebase';
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile } from 'firebase/auth';
+import { 
+  signInWithRedirect, 
+  getRedirectResult, 
+  signInWithPopup, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  sendPasswordResetEmail, 
+  updateProfile 
+} from 'firebase/auth';
 import { Logo } from '../common/Logo';
-import { X, Mail, Lock, User, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { X, Mail, Lock, User, AlertCircle, CheckCircle2, ArrowLeft, Sparkles } from 'lucide-react';
 import { getFriendlyAuthErrorMessage } from '../../services/authErrors';
 
 export const AuthModal: React.FC = () => {
@@ -18,15 +26,37 @@ export const AuthModal: React.FC = () => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isMethodDisabled, setIsMethodDisabled] = useState(false);
+  const [isAccountNotFound, setIsAccountNotFound] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  // Capture Google redirect result when returning
+  useEffect(() => {
+    let isMounted = true;
+    getRedirectResult(auth)
+      .then((result) => {
+        if (!isMounted || !result?.user) return;
+        closeAuthModal();
+      })
+      .catch((err: any) => {
+        if (!isMounted) return;
+        console.error('[AuthModal getRedirectResult Error]', { code: err?.code, message: err?.message, err });
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [closeAuthModal]);
 
   if (!authModalOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setIsMethodDisabled(false);
+    setIsAccountNotFound(false);
     setSuccessMessage(null);
 
     if (!email.trim()) {
@@ -73,7 +103,15 @@ export const AuthModal: React.FC = () => {
       closeAuthModal();
     } catch (err: any) {
       console.error('[AuthModal Email Auth Error]', { code: err?.code, message: err?.message, err });
-      setError(getFriendlyAuthErrorMessage(err));
+      if (err?.code === 'auth/operation-not-allowed') {
+        setIsMethodDisabled(true);
+        setError('Email/Password provider is disabled in Firebase project "endless-quote-51ttq". Please sign in with Google or enable it in project settings.');
+      } else if (authModalMode === 'login' && (err?.code === 'auth/invalid-credential' || err?.code === 'auth/user-not-found')) {
+        setIsAccountNotFound(true);
+        setError('No account found matching this email, or incorrect password. If you are new, register an account.');
+      } else {
+        setError(getFriendlyAuthErrorMessage(err));
+      }
     } finally {
       setLoading(false);
     }
@@ -83,8 +121,19 @@ export const AuthModal: React.FC = () => {
     setError(null);
     setGoogleLoading(true);
     try {
-      await signInWithPopup(auth, googleProvider);
-      closeAuthModal();
+      try {
+        const result = await signInWithPopup(auth, googleProvider);
+        if (result?.user) {
+          closeAuthModal();
+        }
+      } catch (popupErr: any) {
+        // If popup is blocked by the browser, fall back to redirect
+        if (popupErr?.code === 'auth/popup-blocked') {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        }
+        throw popupErr;
+      }
     } catch (err: any) {
       console.error('[AuthModal Google Auth Error]', { code: err?.code, message: err?.message, err });
       setError(getFriendlyAuthErrorMessage(err));
@@ -134,9 +183,49 @@ export const AuthModal: React.FC = () => {
 
         {/* Error Alert */}
         {error && (
-          <div className="mb-4 p-3.5 rounded-2xl bg-red-950/70 border border-red-500/40 text-red-200 text-xs flex items-center gap-2.5 leading-relaxed">
-            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-            <span className="flex-1">{error}</span>
+          <div className="mb-4 p-3.5 rounded-2xl bg-red-950/70 border border-red-500/40 text-red-200 text-xs flex flex-col gap-2.5 leading-relaxed">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+              <span className="flex-1">{error}</span>
+            </div>
+            
+            {isAccountNotFound && (
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setIsAccountNotFound(false);
+                  openAuthModal('register');
+                }}
+                className="mt-1 w-full py-2 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
+              >
+                <span>Register this account now</span>
+              </button>
+            )}
+
+            {isMethodDisabled && (
+              <div className="space-y-1.5 mt-1">
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={googleLoading}
+                  className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Use Google Sign-In Instead</span>
+                </button>
+                <div className="text-center">
+                  <a
+                    href="https://console.firebase.google.com/project/endless-quote-51ttq/authentication/providers"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] text-zinc-400 hover:text-amber-400 underline transition-colors"
+                  >
+                    Open Firebase Console Settings (Project: endless-quote-51ttq) ↗
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -147,7 +236,11 @@ export const AuthModal: React.FC = () => {
               type="button"
               onClick={handleGoogleSignIn}
               disabled={googleLoading || loading}
-              className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 text-white text-xs font-semibold flex items-center justify-center gap-3 transition-all cursor-pointer disabled:opacity-50"
+              className={`w-full py-2.5 px-4 rounded-xl text-white text-xs font-semibold flex items-center justify-center gap-3 transition-all cursor-pointer disabled:opacity-50 ${
+                isMethodDisabled
+                  ? 'bg-amber-500/10 border-2 border-amber-500 hover:bg-amber-500/20 shadow-lg shadow-amber-500/20 text-amber-300'
+                  : 'bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-slate-600'
+              }`}
             >
               <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                 <path

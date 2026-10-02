@@ -141,7 +141,11 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
       onSuccess();
     } catch (err: any) {
       console.error('[AdminCMS Email Login Error]', { code: err?.code, message: err?.message, err });
-      setError(err?.code || err?.message || 'Login failed.');
+      if (err?.code === 'auth/operation-not-allowed') {
+        setError('Email/Password sign-in is disabled in your Firebase Console. Please use "Continue with Google Administrator" above.');
+      } else {
+        setError(err?.code || err?.message || 'Login failed.');
+      }
     } finally {
       // ALWAYS called to render form cleanly
       setLoading(false);
@@ -152,23 +156,39 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
     setError(null);
     setGoogleLoading(true);
     try {
-      // Standard Firebase redirect authentication flow
+      let user = null;
       try {
-        await signInWithRedirect(auth, googleProvider);
-      } catch (redirectErr: any) {
-        // Fallback for sandboxed iframe environments where redirect navigation may be restricted
-        if (redirectErr?.code === 'auth/operation-not-supported-in-this-environment') {
-          const result = await signInWithPopup(auth, googleProvider);
-          const user = result.user;
-          const isAdm = await checkIsAdmin(user.uid, user.email || '');
-          if (!isAdm) {
-            setError(`Access Denied: Account (${user.email}) does not have Studio Administrator clearance.`);
-            return;
-          }
-          onSuccess();
-        } else {
-          throw redirectErr;
+        const result = await signInWithPopup(auth, googleProvider);
+        user = result.user;
+      } catch (popupErr: any) {
+        if (popupErr?.code === 'auth/popup-blocked') {
+          await signInWithRedirect(auth, googleProvider);
+          return;
         }
+        throw popupErr;
+      }
+
+      if (user) {
+        try {
+          await setDoc(doc(db, "users", user.uid), {
+            uid: user.uid,
+            id: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            photoURL: user.photoURL,
+            role: 'ADMIN',
+            lastLogin: new Date().toISOString()
+          }, { merge: true });
+        } catch (dbErr) {
+          console.warn('[AdminCMS Google Login Firestore sync warning]', dbErr);
+        }
+
+        const isAdm = await checkIsAdmin(user.uid, user.email || '');
+        if (!isAdm) {
+          setError(`Access Denied: Account (${user.email}) does not have Studio Administrator clearance.`);
+          return;
+        }
+        onSuccess();
       }
     } catch (err: any) {
       console.error('[AdminCMS Google Login Error]', { code: err?.code, message: err?.message, err });

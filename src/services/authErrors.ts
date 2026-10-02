@@ -17,7 +17,7 @@ export function getFriendlyAuthErrorMessage(error: any): string {
 
   switch (code) {
     case 'auth/operation-not-allowed':
-      return 'This authentication method is disabled in your Firebase Console settings.';
+      return 'Email/Password sign-in is disabled in your Firebase project. Please sign in with "Continue with Google" or enable Email/Password under Authentication > Sign-in method in the Firebase Console.';
 
     case 'auth/invalid-credential':
     case 'auth/wrong-password':

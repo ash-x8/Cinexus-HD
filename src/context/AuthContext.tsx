@@ -209,7 +209,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       provider.setCustomParameters({
         prompt: 'select_account'
       });
-      const result = await signInWithPopup(auth, provider);
+      let result;
+      try {
+        result = await signInWithPopup(auth, provider);
+      } catch (popupErr: any) {
+        if (popupErr?.code === 'auth/popup-blocked') {
+          await signInWithRedirect(auth, provider);
+          // Redirect will navigate away
+          return new Promise(() => {});
+        }
+        throw popupErr;
+      }
       const fUser = result.user;
 
       const isAdm = (fUser.email === 'kushanashvika216@gmail.com') || await checkIsAdmin(fUser.uid, fUser.email || '');
@@ -299,7 +309,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       provider.setCustomParameters({
         prompt: 'select_account'
       });
-      const cred = await signInWithPopup(auth, provider);
+      let cred;
+      try {
+        cred = await signInWithPopup(auth, provider);
+      } catch (popupErr: any) {
+        if (popupErr?.code === 'auth/popup-blocked') {
+          await signInWithRedirect(auth, provider);
+          return new Promise(() => {});
+        }
+        throw popupErr;
+      }
       const isAdm = await checkIsAdmin(cred.user.uid, cred.user.email || '');
       if (!isAdm) {
         await signOut(auth);

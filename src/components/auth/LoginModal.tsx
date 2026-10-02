@@ -30,6 +30,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isMethodDisabled, setIsMethodDisabled] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -74,6 +75,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setIsMethodDisabled(false);
     setSuccessMessage(null);
 
     const cleanEmail = email.trim();
@@ -123,7 +125,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error('[LoginModal Email Auth Error]', { code: err?.code, message: err?.message, err });
-      setError(err?.code || err?.message || 'Authentication failed.');
+      if (err?.code === 'auth/operation-not-allowed') {
+        setIsMethodDisabled(true);
+        setError('Email/Password sign-in is disabled in your Firebase Console. Please use "Continue with Google" below.');
+      } else {
+        setError(err?.code || err?.message || 'Authentication failed.');
+      }
     } finally {
       setLoading(false);
     }
@@ -133,33 +140,35 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setError(null);
     setGoogleLoading(true);
     try {
-      // Standard mobile/web redirect flow
+      let user = null;
       try {
-        await signInWithRedirect(auth, googleProvider);
-      } catch (redirectErr: any) {
-        // Fallback for sandboxed iframe where top navigation is restricted
-        if (redirectErr?.code === 'auth/operation-not-supported-in-this-environment') {
-          const result = await signInWithPopup(auth, googleProvider);
-          const user = result.user;
-          try {
-            await setDoc(doc(db, "users", user.uid), {
-              uid: user.uid,
-              id: user.uid,
-              email: user.email,
-              displayName: user.displayName || user.email?.split('@')[0] || 'Cinema Fan',
-              name: user.displayName || user.email?.split('@')[0] || 'Cinema Fan',
-              photoURL: user.photoURL || null,
-              avatarUrl: user.photoURL || null,
-              role: user.email === 'kushanashvika216@gmail.com' ? 'ADMIN' : 'USER',
-              lastLogin: new Date().toISOString()
-            }, { merge: true });
-          } catch (dbErr) {
-            console.warn('[LoginModal Firestore sync warning]:', dbErr);
-          }
-          onClose();
-        } else {
-          throw redirectErr;
+        const result = await signInWithPopup(auth, googleProvider);
+        user = result.user;
+      } catch (popupErr: any) {
+        if (popupErr?.code === 'auth/popup-blocked') {
+          await signInWithRedirect(auth, googleProvider);
+          return;
         }
+        throw popupErr;
+      }
+
+      if (user) {
+        try {
+          await setDoc(doc(db, "users", user.uid), {
+            uid: user.uid,
+            id: user.uid,
+            email: user.email,
+            displayName: user.displayName || user.email?.split('@')[0] || 'Cinema Fan',
+            name: user.displayName || user.email?.split('@')[0] || 'Cinema Fan',
+            photoURL: user.photoURL || null,
+            avatarUrl: user.photoURL || null,
+            role: user.email === 'kushanashvika216@gmail.com' ? 'ADMIN' : 'USER',
+            lastLogin: new Date().toISOString()
+          }, { merge: true });
+        } catch (dbErr) {
+          console.warn('[LoginModal Firestore sync warning]:', dbErr);
+        }
+        onClose();
       }
     } catch (err: any) {
       console.error("Auth Error:", err?.code, err?.message, err);
@@ -209,9 +218,21 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
         {/* Error Alert */}
         {error && (
-          <div className="mb-4 p-3.5 rounded-2xl bg-red-950/70 border border-red-500/40 text-red-200 text-xs flex items-center gap-2.5 leading-relaxed">
-            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-            <span className="flex-1">{error}</span>
+          <div className="mb-4 p-3.5 rounded-2xl bg-red-950/70 border border-red-500/40 text-red-200 text-xs flex flex-col gap-2.5 leading-relaxed">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+              <span className="flex-1">{error}</span>
+            </div>
+            {isMethodDisabled && (
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={googleLoading}
+                className="mt-1 w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
+              >
+                <span>Continue with Google Account</span>
+              </button>
+            )}
           </div>
         )}
 
@@ -222,7 +243,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               type="button"
               onClick={handleGoogleSignIn}
               disabled={googleLoading || loading}
-              className="w-full py-2.5 px-4 rounded-xl bg-black/40 hover:bg-black/60 border border-white/10 hover:border-amber-500/40 text-white text-xs font-semibold flex items-center justify-center gap-3 transition-all cursor-pointer disabled:opacity-50"
+              className={`w-full py-2.5 px-4 rounded-xl text-white text-xs font-semibold flex items-center justify-center gap-3 transition-all cursor-pointer disabled:opacity-50 ${
+                isMethodDisabled
+                  ? 'bg-amber-500/10 border-2 border-amber-500 hover:bg-amber-500/20 text-amber-300 ring-2 ring-amber-500/20 shadow-lg shadow-amber-500/15'
+                  : 'bg-black/40 hover:bg-black/60 border border-white/10 hover:border-amber-500/40'
+              }`}
             >
               <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                 <path

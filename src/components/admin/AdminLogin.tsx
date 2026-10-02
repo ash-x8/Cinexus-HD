@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { auth, googleProvider, db } from '../../firebase';
-import { signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithPopup, signInWithRedirect, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { checkIsAdmin } from '../../services/firestore';
 import { Logo } from '../common/Logo';
@@ -36,7 +36,11 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
       onSuccess();
     } catch (err: any) {
       console.error('[AdminCMS Email Login Error]', { code: err?.code, message: err?.message, err });
-      setError(getFriendlyAuthErrorMessage(err));
+      if (err?.code === 'auth/operation-not-allowed') {
+        setError('Email/Password authentication is disabled in your Firebase Console. Please use "Continue with Google Administrator" above.');
+      } else {
+        setError(getFriendlyAuthErrorMessage(err));
+      }
     } finally {
       setLoading(false);
     }
@@ -46,7 +50,16 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess }) => {
     setError(null);
     setGoogleLoading(true);
     try {
-      const cred = await signInWithPopup(auth, googleProvider);
+      let cred;
+      try {
+        cred = await signInWithPopup(auth, googleProvider);
+      } catch (popupErr: any) {
+        if (popupErr?.code === 'auth/popup-blocked') {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        }
+        throw popupErr;
+      }
       const user = cred.user;
 
       try {
