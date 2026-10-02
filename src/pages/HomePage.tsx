@@ -248,6 +248,7 @@ export const HomePage: React.FC = () => {
                   key={sec.id}
                   title={sec.title}
                   subtitle={sec.subtitle}
+                  badge={sec.badge}
                   items={sectionItems}
                   isTop10={sec.badge === 'TOP 10'}
                 />

@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
+import firebaseAppletConfig from '../firebase-applet-config.json';
 import {
   initializeAppCheck,
   ReCaptchaV3Provider,
@@ -21,16 +22,16 @@ import { getFirestore, Firestore } from "firebase/firestore";
 import { getStorage, FirebaseStorage } from "firebase/storage";
 import { getMessaging, getToken, Messaging } from "firebase/messaging";
 
-// User's Verified Firebase Project Configuration
+// Provisioned Firebase Project Configuration from firebase-applet-config.json
 export const firebaseConfig = {
-  apiKey: "AIzaSyBaVKLUMUG_iHv2zgtX5FHeTBMrsPskgoE",
-  authDomain: "cinexus-hd.firebaseapp.com",
-  projectId: "cinexus-hd",
-  storageBucket: "cinexus-hd.firebasestorage.app",
-  messagingSenderId: "1034803141860",
-  appId: "1:1034803141860:web:ebb6cc8ba4bc3b84a960f1",
-  measurementId: "G-CGJ0MXGY1G",
-  databaseURL: "https://cinexus-hd-default-rtdb.firebaseio.com"
+  apiKey: firebaseAppletConfig.apiKey || "AIzaSyAekzhVaPluAKCLRZlrojsPyQEM2lXRp7Q",
+  authDomain: firebaseAppletConfig.authDomain || "endless-quote-51ttq.firebaseapp.com",
+  projectId: firebaseAppletConfig.projectId || "endless-quote-51ttq",
+  storageBucket: firebaseAppletConfig.storageBucket || "endless-quote-51ttq.firebasestorage.app",
+  messagingSenderId: firebaseAppletConfig.messagingSenderId || "416026597596",
+  appId: firebaseAppletConfig.appId || "1:416026597596:web:322ba35009ebfc0a177c19",
+  measurementId: firebaseAppletConfig.measurementId || "G-CGJ0MXGY1G",
+  databaseURL: (firebaseAppletConfig as any).databaseURL || `https://${firebaseAppletConfig.projectId || 'endless-quote-51ttq'}-default-rtdb.firebaseio.com`
 };
 
 // 1. Initialize Firebase App instance singleton
@@ -68,8 +69,10 @@ googleProvider.setCustomParameters({
   prompt: "select_account"
 });
 
-// 5. Initialize Cloud Firestore
-export const db: Firestore = getFirestore(app);
+// 5. Initialize Cloud Firestore (targeting the provisioned database ID)
+export const db: Firestore = firebaseAppletConfig.firestoreDatabaseId 
+  ? getFirestore(app, firebaseAppletConfig.firestoreDatabaseId)
+  : getFirestore(app);
 
 // 6. Initialize Firebase Storage
 export const storage: FirebaseStorage = getStorage(app);

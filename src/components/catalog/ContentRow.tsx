@@ -6,11 +6,12 @@ import { ContentCard } from './ContentCard';
 interface ContentRowProps {
   title: string;
   subtitle?: string;
+  badge?: string;
   items: MovieItem[];
   isTop10?: boolean;
 }
 
-export const ContentRow: React.FC<ContentRowProps> = ({ title, subtitle, items, isTop10 = false }) => {
+export const ContentRow: React.FC<ContentRowProps> = ({ title, subtitle, badge, items, isTop10 = false }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   if (!items || items.length === 0) return null;
@@ -29,8 +30,13 @@ export const ContentRow: React.FC<ContentRowProps> = ({ title, subtitle, items, 
       {/* Header */}
       <div className="flex items-end justify-between mb-4 px-4 sm:px-6 lg:px-8">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white font-display">
-            {title}
+          <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white font-display flex items-center gap-2.5">
+            <span>{title}</span>
+            {badge && (
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-500 to-amber-600 text-black shadow-md shadow-amber-500/20">
+                {badge}
+              </span>
+            )}
           </h2>
           {subtitle && <p className="text-xs text-zinc-400 mt-0.5">{subtitle}</p>}
         </div>
