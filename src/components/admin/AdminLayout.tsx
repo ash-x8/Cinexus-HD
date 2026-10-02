@@ -16,6 +16,7 @@ import {
   Settings,
   Shield,
   FileText,
+  Activity,
   LogOut,
   ExternalLink,
   Menu,
@@ -65,7 +66,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ activeTab, onTabChange
     { id: 'seo', label: 'SEO & Metadata', icon: Globe },
     { id: 'settings', label: 'Platform Settings', icon: Settings },
     { id: 'security', label: 'Admin Security', icon: Shield },
-    { id: 'audit', label: 'Audit Trail', icon: FileText }
+    { id: 'audit', label: 'Activity Logs', icon: Activity }
   ];
 
   const handleLogout = async () => {

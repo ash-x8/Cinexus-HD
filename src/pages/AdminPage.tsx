@@ -11,6 +11,7 @@ import { AdminMedia } from '../components/admin/AdminMedia';
 import { AdminHomepage } from '../components/admin/AdminHomepage';
 import { AdminSettings } from '../components/admin/AdminSettings';
 import { AdminAudit } from '../components/admin/AdminAudit';
+import { AdminActivityLogs } from '../components/admin/AdminActivityLogs';
 import { ShieldAlert, ArrowLeft, Loader2 } from 'lucide-react';
 
 export const AdminPage: React.FC = () => {
@@ -108,7 +109,7 @@ export const AdminPage: React.FC = () => {
       {activeTab === 'seo' && <AdminSettings />}
       {activeTab === 'settings' && <AdminSettings />}
       {activeTab === 'security' && <AdminSettings />}
-      {activeTab === 'audit' && <AdminAudit />}
+      {activeTab === 'audit' && <AdminActivityLogs />}
     </AdminLayout>
   );
 };

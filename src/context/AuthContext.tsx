@@ -4,6 +4,8 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithRedirect,
+  getRedirectResult,
   signInWithPopup,
   GoogleAuthProvider,
   signOut,
@@ -137,6 +139,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const safetyTimer = setTimeout(() => {
       if (isMounted) setIsLoading(false);
     }, 1500);
+
+    // Capture incoming redirect credential if returning from Google Auth
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (!isMounted || !result?.user) return;
+        await syncUserData(result.user);
+      })
+      .catch((err) => {
+        console.error('[AuthContext] getRedirectResult Error:', err?.code, err?.message, err);
+      });
 
     const unsubscribe = onAuthStateChanged(auth, async (fUser) => {
       if (!isMounted) return;

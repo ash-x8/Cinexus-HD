@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { auth, googleProvider, db } from '../../firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { 
+  signInWithRedirect,
+  getRedirectResult,
   signInWithPopup, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -32,6 +34,41 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  // Seamlessly capture redirect authentication results when returning to app
+  useEffect(() => {
+    let isMounted = true;
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (!isMounted || !result?.user) return;
+        const user = result.user;
+        try {
+          await setDoc(doc(db, "users", user.uid), {
+            uid: user.uid,
+            id: user.uid,
+            email: user.email,
+            displayName: user.displayName || user.email?.split('@')[0] || 'Cinema Fan',
+            name: user.displayName || user.email?.split('@')[0] || 'Cinema Fan',
+            photoURL: user.photoURL || null,
+            avatarUrl: user.photoURL || null,
+            role: user.email === 'kushanashvika216@gmail.com' ? 'ADMIN' : 'USER',
+            lastLogin: new Date().toISOString()
+          }, { merge: true });
+        } catch (dbErr) {
+          console.warn('[LoginModal Redirect Firestore sync warning]:', dbErr);
+        }
+        onClose();
+      })
+      .catch((err: any) => {
+        if (!isMounted) return;
+        console.error("Auth Redirect Error:", err?.code, err?.message, err);
+        setError(err?.code || err?.message || 'Authentication error.');
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [onClose]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -52,7 +89,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         setSuccessMessage('Password reset link sent! Please check your inbox.');
       } catch (err: any) {
         console.error('[LoginModal resetPassword Error]', { code: err?.code, message: err?.message, err });
-        setError(getFriendlyAuthErrorMessage(err));
+        setError(err?.code || err?.message || 'Failed to send password reset email.');
       } finally {
         setLoading(false);
       }
@@ -86,7 +123,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error('[LoginModal Email Auth Error]', { code: err?.code, message: err?.message, err });
-      setError(getFriendlyAuthErrorMessage(err));
+      setError(err?.code || err?.message || 'Authentication failed.');
     } finally {
       setLoading(false);
     }
@@ -96,30 +133,37 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setError(null);
     setGoogleLoading(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      
-      // Ensure Firestore user document creation doesn't block the UI or crash if network/rules delay
+      // Standard mobile/web redirect flow
       try {
-        await setDoc(doc(db, "users", user.uid), {
-          uid: user.uid,
-          id: user.uid,
-          email: user.email,
-          displayName: user.displayName || user.email?.split('@')[0] || 'Cinema Fan',
-          name: user.displayName || user.email?.split('@')[0] || 'Cinema Fan',
-          photoURL: user.photoURL || null,
-          avatarUrl: user.photoURL || null,
-          role: user.email === 'kushanashvika216@gmail.com' ? 'ADMIN' : 'USER',
-          lastLogin: new Date().toISOString()
-        }, { merge: true });
-      } catch (dbErr) {
-        console.warn('[LoginModal Firestore sync warning]:', dbErr);
+        await signInWithRedirect(auth, googleProvider);
+      } catch (redirectErr: any) {
+        // Fallback for sandboxed iframe where top navigation is restricted
+        if (redirectErr?.code === 'auth/operation-not-supported-in-this-environment') {
+          const result = await signInWithPopup(auth, googleProvider);
+          const user = result.user;
+          try {
+            await setDoc(doc(db, "users", user.uid), {
+              uid: user.uid,
+              id: user.uid,
+              email: user.email,
+              displayName: user.displayName || user.email?.split('@')[0] || 'Cinema Fan',
+              name: user.displayName || user.email?.split('@')[0] || 'Cinema Fan',
+              photoURL: user.photoURL || null,
+              avatarUrl: user.photoURL || null,
+              role: user.email === 'kushanashvika216@gmail.com' ? 'ADMIN' : 'USER',
+              lastLogin: new Date().toISOString()
+            }, { merge: true });
+          } catch (dbErr) {
+            console.warn('[LoginModal Firestore sync warning]:', dbErr);
+          }
+          onClose();
+        } else {
+          throw redirectErr;
+        }
       }
-
-      onClose();
     } catch (err: any) {
-      console.error("Auth Error:", err?.code, err?.message);
-      setError(getFriendlyAuthErrorMessage(err));
+      console.error("Auth Error:", err?.code, err?.message, err);
+      setError(err?.code || err?.message || 'Google sign-in failed.');
     } finally {
       setGoogleLoading(false);
     }
