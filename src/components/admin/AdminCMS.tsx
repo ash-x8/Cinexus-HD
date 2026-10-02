@@ -4,6 +4,27 @@ import { signInWithPopup, signInWithEmailAndPassword, onAuthStateChanged } from 
 import { doc, setDoc } from 'firebase/firestore';
 import { checkIsAdmin, sanitizeData, sanitizeMovieData } from '../../services/firestore';
 export { sanitizeData, sanitizeMovieData };
+
+/**
+ * Data Sanitization before Firestore Write
+ * Converts all undefined values to empty strings
+ */
+export const sanitizePayload = (data: Record<string, any>): Record<string, any> => {
+  const cleanObj: Record<string, any> = {};
+  Object.keys(data).forEach((key) => {
+    cleanObj[key] = data[key] === undefined ? "" : data[key];
+  });
+  return cleanObj;
+};
+
+/**
+ * Helper to save movie record with sanitizePayload
+ */
+export const saveMovieToFirestore = async (movieId: string, payload: Record<string, any>) => {
+  const cleanPayload = sanitizePayload(payload);
+  await setDoc(doc(db, "movies", movieId), cleanPayload, { merge: true });
+  return cleanPayload;
+};
 import { Logo } from '../common/Logo';
 import { Lock, Mail, ShieldAlert, ArrowRight, Loader2 } from 'lucide-react';
 import { getFriendlyAuthErrorMessage } from '../../services/authErrors';

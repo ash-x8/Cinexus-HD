@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Layers,
   Plus,
-  ArrowUp,
-  ArrowDown,
   Trash2,
   Check,
   Edit,
@@ -13,8 +11,27 @@ import {
   Sparkles,
   Loader2,
   AlertCircle,
-  Tag
+  Tag,
+  GripVertical,
+  MoveVertical
 } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { 
   getHomepageSections, 
   subscribeHomepageSections, 
@@ -25,6 +42,116 @@ import {
 import { HomepageSectionConfig } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 
+interface SortableRailItemProps {
+  sec: HomepageSectionConfig;
+  index: number;
+  onToggleEnable: (sec: HomepageSectionConfig) => void;
+  onEdit: (sec: HomepageSectionConfig) => void;
+  onDelete: (id: string, title: string) => void;
+}
+
+const SortableRailItem: React.FC<SortableRailItemProps> = ({
+  sec,
+  index,
+  onToggleEnable,
+  onEdit,
+  onDelete
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: sec.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.6 : 1
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 select-none ${
+        isDragging
+          ? 'bg-[#181C28] border-amber-500 shadow-2xl scale-[1.02]'
+          : sec.enabled
+          ? 'bg-zinc-950 border-white/10 shadow-sm'
+          : 'bg-zinc-950/40 border-white/5 opacity-60'
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        {/* Visual Drag Handle */}
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="p-2 -ml-1 text-zinc-500 hover:text-amber-400 cursor-grab active:cursor-grabbing rounded-xl hover:bg-white/5 transition-colors touch-none"
+          title="Drag up or down to reorder rail"
+          aria-label={`Drag to reorder rail ${sec.title}`}
+        >
+          <GripVertical className="w-5 h-5" />
+        </button>
+
+        <div className="w-7 text-center font-mono font-bold text-zinc-500 text-xs">
+          #{index + 1}
+        </div>
+
+        <div>
+          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+            <span>{sec.title}</span>
+            {sec.badge && (
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-500 to-amber-600 text-black shadow-sm">
+                {sec.badge}
+              </span>
+            )}
+          </h3>
+          <p className="text-xs text-zinc-400 mt-0.5">{sec.subtitle || 'No subtitle provided.'}</p>
+          <div className="text-[10px] text-zinc-500 mt-1 uppercase">
+            Limit: {sec.itemLimit || sec.limit || 12} titles · Genre: {sec.filterGenre || 'all'}
+          </div>
+        </div>
+      </div>
+
+      {/* Action Controls */}
+      <div className="flex items-center gap-2 self-end sm:self-auto">
+        <button
+          onClick={() => onToggleEnable(sec)}
+          className={`p-2 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
+            sec.enabled
+              ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+              : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'
+          }`}
+          title={sec.enabled ? 'Enabled on Homepage' : 'Hidden from Homepage'}
+        >
+          {sec.enabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+        </button>
+
+        <button
+          onClick={() => onEdit(sec)}
+          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-300 cursor-pointer"
+          title="Edit Rail Details"
+        >
+          <Edit className="w-4 h-4" />
+        </button>
+
+        <button
+          onClick={() => onDelete(sec.id, sec.title)}
+          className="p-2 rounded-xl bg-red-600/10 hover:bg-red-600/20 text-red-400 cursor-pointer"
+          title="Delete Rail"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export const AdminHomepage: React.FC = () => {
   const { user } = useAuth();
   const [sections, setSections] = useState<HomepageSectionConfig[]>([]);
@@ -33,6 +160,18 @@ export const AdminHomepage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Setup dnd-kit sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5 // allows click without accidental drag
+      }
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates
+    })
+  );
 
   // Subscribe to realtime homepage rails from Firestore
   useEffect(() => {
@@ -67,27 +206,38 @@ export const AdminHomepage: React.FC = () => {
     }
   };
 
-  const handleMoveOrder = async (index: number, direction: 'up' | 'down') => {
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= sections.length) return;
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
 
-    const list = [...sections];
-    const temp = list[index];
-    list[index] = list[targetIndex];
-    list[targetIndex] = temp;
+    const oldIndex = sections.findIndex((s) => s.id === active.id);
+    const newIndex = sections.findIndex((s) => s.id === over.id);
 
-    // Re-index order
-    const updatedList = list.map((s, idx) => ({ ...s, order: idx + 1 }));
-    setSections(updatedList);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reorderedList = arrayMove(sections, oldIndex, newIndex).map((s, idx) => ({
+      ...s,
+      order: idx + 1
+    }));
+
+    setSections(reorderedList);
 
     try {
-      for (const item of updatedList) {
+      for (const item of reorderedList) {
         await saveHomepageSection(item);
       }
-      await logAdminAction(user?.email || 'admin', 'REORDER_RAILS', 'homepage', 'all', 'Reordered homepage rails');
+      await logAdminAction(
+        user?.email || 'admin',
+        'REORDER_RAILS_DND',
+        'homepage',
+        'all',
+        'Visually reordered homepage rails via drag-and-drop'
+      );
+      setSaveNotice('Rail order re-indexed and saved in real-time.');
+      setTimeout(() => setSaveNotice(null), 3000);
     } catch (err: any) {
-      console.error('Reorder error:', err);
-      setSaveError(`Failed to save reordered rails: ${err.message || 'Firestore error'}`);
+      console.error('Save reordered rails error:', err);
+      setSaveError(`Failed to save rail order: ${err.message || 'Firestore error'}`);
     }
   };
 
@@ -160,7 +310,7 @@ export const AdminHomepage: React.FC = () => {
             </span>
           </h1>
           <p className="text-xs text-zinc-400 mt-0.5">
-            Configure dynamic homepage row ordering, titles, badges, and visibility in real-time.
+            Drag and drop rails to visually rearrange display order on the public cinema homepage.
           </p>
         </div>
 
@@ -202,7 +352,15 @@ export const AdminHomepage: React.FC = () => {
         </div>
       )}
 
-      {/* Sections List */}
+      {/* Visual Reordering Guide */}
+      {sections.length > 1 && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">
+          <MoveVertical className="w-4 h-4 shrink-0 text-amber-400" />
+          <span>Grab the handle on the left of any rail to drag and drop it into your preferred homepage position.</span>
+        </div>
+      )}
+
+      {/* Sections List with dnd-kit Drag and Drop */}
       <div className="space-y-3">
         {loading ? (
           <div className="p-12 text-center text-zinc-400 text-xs flex flex-col items-center justify-center space-y-3 bg-[#12151E] rounded-2xl border border-white/10">
@@ -214,85 +372,29 @@ export const AdminHomepage: React.FC = () => {
             No dynamic homepage rails configured yet. Click "Add Homepage Rail" to create dynamic curated rows that render on the public website.
           </div>
         ) : (
-          sections.map((sec, idx) => (
-            <div
-              key={sec.id}
-              className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-                sec.enabled
-                  ? 'bg-zinc-950 border-white/10 shadow-sm'
-                  : 'bg-zinc-950/40 border-white/5 opacity-60'
-              }`}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={sections.map((s) => s.id)}
+              strategy={verticalListSortingStrategy}
             >
-              <div className="flex items-center gap-4">
-                <div className="w-8 text-center font-mono font-bold text-zinc-500 text-xs">
-                  #{sec.order}
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                    <span>{sec.title}</span>
-                    {sec.badge && (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-500 to-amber-600 text-black shadow-sm">
-                        {sec.badge}
-                      </span>
-                    )}
-                  </h3>
-                  <p className="text-xs text-zinc-400 mt-0.5">{sec.subtitle || 'No subtitle provided.'}</p>
-                  <div className="text-[10px] text-zinc-500 mt-1 uppercase">
-                    Limit: {sec.itemLimit || sec.limit || 12} titles · Genre: {sec.filterGenre || 'all'}
-                  </div>
-                </div>
+              <div className="space-y-3">
+                {sections.map((sec, idx) => (
+                  <SortableRailItem
+                    key={sec.id}
+                    sec={sec}
+                    index={idx}
+                    onToggleEnable={handleToggleEnable}
+                    onEdit={(s) => setEditingSec({ ...s })}
+                    onDelete={handleDelete}
+                  />
+                ))}
               </div>
-
-              {/* Action Controls */}
-              <div className="flex items-center gap-2 self-end sm:self-auto">
-                <button
-                  onClick={() => handleToggleEnable(sec)}
-                  className={`p-2 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
-                    sec.enabled
-                      ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-                      : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'
-                  }`}
-                  title={sec.enabled ? 'Enabled on Homepage' : 'Hidden from Homepage'}
-                >
-                  {sec.enabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                </button>
-
-                <button
-                  onClick={() => handleMoveOrder(idx, 'up')}
-                  disabled={idx === 0}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-300 disabled:opacity-30 cursor-pointer"
-                  title="Move Up"
-                >
-                  <ArrowUp className="w-4 h-4" />
-                </button>
-
-                <button
-                  onClick={() => handleMoveOrder(idx, 'down')}
-                  disabled={idx === sections.length - 1}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-300 disabled:opacity-30 cursor-pointer"
-                  title="Move Down"
-                >
-                  <ArrowDown className="w-4 h-4" />
-                </button>
-
-                <button
-                  onClick={() => setEditingSec({ ...sec })}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-300 cursor-pointer"
-                  title="Edit Rail Details"
-                >
-                  <Edit className="w-4 h-4" />
-                </button>
-
-                <button
-                  onClick={() => handleDelete(sec.id, sec.title)}
-                  className="p-2 rounded-xl bg-red-600/10 hover:bg-red-600/20 text-red-400 cursor-pointer"
-                  title="Delete Rail"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 

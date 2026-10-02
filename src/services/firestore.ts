@@ -108,6 +108,17 @@ export const sanitizeMovieData = <T extends Record<string, any> | any>(data: T):
 // Backwards compatibility alias
 export const sanitizeData = sanitizeMovieData;
 
+/**
+ * Strips out or converts all undefined values to empty strings
+ */
+export const sanitizePayload = (data: Record<string, any>): Record<string, any> => {
+  const cleanObj: Record<string, any> = {};
+  Object.keys(data).forEach((key) => {
+    cleanObj[key] = (data as any)[key] === undefined ? "" : (data as any)[key];
+  });
+  return cleanObj;
+};
+
 export const COLLECTIONS = {
   MOVIES: 'movies',
   SERIES: 'series',
