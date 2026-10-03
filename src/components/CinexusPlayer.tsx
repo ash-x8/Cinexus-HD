@@ -127,19 +127,25 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
   useEffect(() => {
     const collected: NormalizedSource[] = [];
 
-    // 1. Direct explicit prop src
+    // 1. Resolve TMDb / IMDb IDs for real movie streaming embeds
+    const tmdbId = activeContent?.tmdbId || (activeContent?.id?.startsWith('tmdb_') ? activeContent.id.replace(/^tmdb_(tv_)?/, '') : null);
+    const isTvShow = activeContent?.mediaType === 'tv' || (activeContent?.mediaType as any) === 'series' || !!activeEpisode;
+    const sNum = activeEpisode?.seasonNumber || 1;
+    const eNum = activeEpisode?.episodeNumber || 1;
+
+    // 2. Direct explicit prop src if provided (e.g. mp4, m3u8, or custom stream)
     if (src) {
       const isYt = !!getYouTubeId(src);
       const isEmbed = isYt || /embed|filemoon|streamtape|vidcloud|multiembed|vidsrc/i.test(src);
       collected.push({
         id: 'prop-src',
-        name: isYt ? 'YouTube Trailer' : isEmbed ? 'Fast Stream Embed' : 'Direct 4K Master',
+        name: isYt ? 'Official Trailer' : isEmbed ? 'Server 1 (Fast Embed)' : 'Direct 4K Master',
         url: isYt ? getYouTubeEmbedUrl(src) || src : src,
         type: isYt ? 'youtube' : isEmbed ? 'iframe' : 'video'
       });
     }
 
-    // 2. Episode sources
+    // 3. Direct custom episode sources
     if (activeEpisode?.sources && activeEpisode.sources.length > 0) {
       activeEpisode.sources.forEach((s, idx) => {
         const isYt = !!getYouTubeId(s.url);
@@ -154,7 +160,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
       });
     }
 
-    // 3. Movie sources
+    // 4. Direct custom movie sources from Firestore
     if (activeContent?.sources && activeContent.sources.length > 0) {
       activeContent.sources.forEach((s: any, idx: number) => {
         const url = s.url || s.streamUrl;
@@ -163,7 +169,7 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
         const isEmbed = isYt || s.type === 'iframe' || s.type === 'embed' || /embed|filemoon|streamtape|vidsrc/i.test(url);
         collected.push({
           id: `movie-src-${idx}`,
-          name: s.name || `Cinema Feed ${idx + 1}`,
+          name: s.name || `Cinema Server ${idx + 1}`,
           url: isYt ? getYouTubeEmbedUrl(url) || url : url,
           type: isYt ? 'youtube' : isEmbed ? 'iframe' : 'video',
           quality: s.quality
@@ -171,17 +177,69 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
       });
     }
 
-    // 4. Single videoUrl or embedUrl on content
+    // 5. Universal Full Film Stream Servers (MultiEmbed, VidSrc, Embed.su, 2Embed)
+    // These stream the FULL REAL MOVIE or TV EPISODE, completely free of YouTube login blocks!
+    if (tmdbId || activeContent?.id) {
+      const targetId = tmdbId || activeContent?.id?.replace(/^tmdb_(tv_)?/, '');
+
+      // Server 1: MultiEmbed (Ultra Fast, High-Bandwidth 4K)
+      collected.push({
+        id: 'srv-multiembed',
+        name: 'Server 1 (MultiEmbed 4K)',
+        url: isTvShow
+          ? `https://multiembed.mov/?video_id=${targetId}&tmdb=1&s=${sNum}&e=${eNum}`
+          : `https://multiembed.mov/?video_id=${targetId}&tmdb=1`,
+        type: 'iframe',
+        quality: '4K Ultra HD'
+      });
+
+      // Server 2: VidSrc VIP (Multi-Audio & Sinhala/English Subs)
+      collected.push({
+        id: 'srv-vidsrc',
+        name: 'Server 2 (VidSrc VIP)',
+        url: isTvShow
+          ? `https://vidsrc.to/embed/tv/${targetId}/${sNum}/${eNum}`
+          : `https://vidsrc.to/embed/movie/${targetId}`,
+        type: 'iframe',
+        quality: '1080p FHD'
+      });
+
+      // Server 3: Embed.su (Ultra-Reliable CDN)
+      collected.push({
+        id: 'srv-embedsu',
+        name: 'Server 3 (Embed.su)',
+        url: isTvShow
+          ? `https://embed.su/embed/tv/${targetId}/${sNum}/${eNum}`
+          : `https://embed.su/embed/movie/${targetId}`,
+        type: 'iframe',
+        quality: '1080p'
+      });
+
+      // Server 4: 2Embed Mirror
+      collected.push({
+        id: 'srv-2embed',
+        name: 'Server 4 (2Embed Mirror)',
+        url: isTvShow
+          ? `https://www.2embed.cc/embedtv/${targetId}&s=${sNum}&e=${eNum}`
+          : `https://www.2embed.cc/embed/${targetId}`,
+        type: 'iframe',
+        quality: 'Auto'
+      });
+    }
+
+    // 6. Direct MP4 / HLS master video if provided on content
     if ((activeContent as any)?.videoUrl) {
       const vUrl = (activeContent as any).videoUrl;
       const isYt = !!getYouTubeId(vUrl);
-      const isEmbed = isYt || /embed|filemoon|streamtape/i.test(vUrl);
-      collected.push({
-        id: 'content-video-url',
-        name: 'Master Video CDN',
-        url: isYt ? getYouTubeEmbedUrl(vUrl) || vUrl : vUrl,
-        type: isYt ? 'youtube' : isEmbed ? 'iframe' : 'video'
-      });
+      if (!isYt) {
+        collected.push({
+          id: 'content-video-url',
+          name: 'Direct 4K Master Feed',
+          url: vUrl,
+          type: 'video',
+          quality: '4K Master'
+        });
+      }
     }
 
     if ((activeContent as any)?.embedUrl) {
@@ -193,20 +251,20 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
       });
     }
 
-    // 5. Official YouTube Trailer
+    // 7. Official YouTube Trailer (ALWAYS AT THE END, LABELED AS TRAILER ONLY)
     if (activeContent?.trailerYoutubeId) {
       const embedUrl = getYouTubeEmbedUrl(activeContent.trailerYoutubeId);
       if (embedUrl) {
         collected.push({
           id: 'official-trailer',
-          name: 'Official 4K Trailer',
+          name: 'Trailer (Preview Only)',
           url: embedUrl,
           type: 'youtube'
         });
       }
     }
 
-    // Fallback demo video if list is empty
+    // Fallback demo video if list is still empty
     if (collected.length === 0) {
       collected.push({
         id: 'default-demo',
