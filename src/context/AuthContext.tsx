@@ -40,7 +40,7 @@ interface AuthContextType {
   adminLoginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
-  uploadAvatar: (file: File) => Promise<string>;
+  uploadAvatar: (file: File | Blob) => Promise<string>;
   removeAvatar: () => Promise<void>;
 }
 
@@ -370,7 +370,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(prev => prev ? { ...prev, ...updates } : null);
   };
 
-  const uploadAvatar = async (file: File): Promise<string> => {
+  const uploadAvatar = async (file: File | Blob): Promise<string> => {
     if (!firebaseUser && !user) throw new Error('You must be logged in to upload an avatar.');
     const uid = firebaseUser?.uid || user?.id;
     if (!uid) throw new Error('User identifier not found.');

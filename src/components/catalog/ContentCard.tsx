@@ -16,10 +16,18 @@ export const ContentCard: React.FC<ContentCardProps> = ({ content, rank, onPlayD
   const isSaved = isInWatchlist(content.id);
 
   const slug = content.slug || content.id;
-  const detailUrl = content.mediaType === 'movie' ? `/movie/${slug}` : `/tv/${slug}`;
+  const watchUrl = `/watch/${slug}`;
 
-  const handleCardClick = () => {
-    navigate(detailUrl);
+  const handleCardClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button[data-subaction]')) {
+      return;
+    }
+    if (onPlayDirect) {
+      onPlayDirect(content);
+    } else {
+      navigate(watchUrl);
+    }
   };
 
   const handlePlayClick = (e: React.MouseEvent) => {
@@ -72,6 +80,7 @@ export const ContentCard: React.FC<ContentCardProps> = ({ content, rank, onPlayD
 
         {/* Watchlist Quick Action */}
         <button
+          data-subaction="true"
           onClick={handleWatchlistClick}
           className={`absolute top-2.5 right-2.5 p-2 rounded-lg backdrop-blur-md transition-all ${
             isSaved

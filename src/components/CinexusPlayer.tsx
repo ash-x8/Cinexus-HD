@@ -100,6 +100,9 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
   const [bufferedEnd, setBufferedEnd] = useState(0);
   const [isTheater, setIsTheater] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isCssFullscreen, setIsCssFullscreen] = useState(false);
+  const [fullscreenOrientation, setFullscreenOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
+  const isFullscreenActive = isFullscreen || isCssFullscreen;
   const [isPiP, setIsPiP] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
@@ -123,159 +126,146 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
   const contentId = activeContent?.id || 'demo-media';
   const progressKey = `cinexus_progress_${contentId}${activeEpisode ? `_ep${activeEpisode.id}` : ''}`;
 
-  // Build Comprehensive List of Playback Sources
+  // Build Comprehensive List of Playback Sources (STRICTLY user-added links only)
   useEffect(() => {
     const collected: NormalizedSource[] = [];
 
-    // 1. Resolve TMDb / IMDb IDs for real movie streaming embeds
-    const tmdbId = activeContent?.tmdbId || (activeContent?.id?.startsWith('tmdb_') ? activeContent.id.replace(/^tmdb_(tv_)?/, '') : null);
-    const isTvShow = activeContent?.mediaType === 'tv' || (activeContent?.mediaType as any) === 'series' || !!activeEpisode;
-    const sNum = activeEpisode?.seasonNumber || 1;
-    const eNum = activeEpisode?.episodeNumber || 1;
+    const isDirectVideoUrl = (url: string) => {
+      if (!url) return false;
+      const clean = url.toLowerCase().split('?')[0];
+      return clean.endsWith('.mp4') || 
+             clean.endsWith('.m3u8') || 
+             clean.endsWith('.webm') || 
+             clean.endsWith('.mov') || 
+             clean.endsWith('.ogg') ||
+             url.includes('.m3u8') ||
+             url.includes('storage.googleapis.com') ||
+             url.includes('commondatastorage.googleapis.com');
+    };
 
-    // 2. Direct explicit prop src if provided (e.g. mp4, m3u8, or custom stream)
-    if (src) {
-      const isYt = !!getYouTubeId(src);
-      const isEmbed = isYt || /embed|filemoon|streamtape|vidcloud|multiembed|vidsrc/i.test(src);
-      collected.push({
-        id: 'prop-src',
-        name: isYt ? 'Official Trailer' : isEmbed ? 'Server 1 (Fast Embed)' : 'Direct 4K Master',
-        url: isYt ? getYouTubeEmbedUrl(src) || src : src,
-        type: isYt ? 'youtube' : isEmbed ? 'iframe' : 'video'
-      });
-    }
+    const detectType = (url: string, explicitType?: string): 'video' | 'iframe' | 'youtube' => {
+      if (getYouTubeId(url)) return 'youtube';
+      if (explicitType === 'youtube') return 'youtube';
+      if (explicitType === 'iframe' || explicitType === 'embed') return 'iframe';
+      if (explicitType === 'mp4' || explicitType === 'hls' || explicitType === 'dash' || explicitType === 'cdn') return 'video';
+      if (isDirectVideoUrl(url)) return 'video';
+      return 'iframe';
+    };
 
-    // 3. Direct custom episode sources
+    // 1. Direct custom episode sources added by user/admin
     if (activeEpisode?.sources && activeEpisode.sources.length > 0) {
       activeEpisode.sources.forEach((s, idx) => {
-        const isYt = !!getYouTubeId(s.url);
-        const isEmbed = isYt || s.type === 'iframe' || s.type === 'embed' || /embed|filemoon|streamtape|vidsrc/i.test(s.url);
+        if (!s.url || !s.url.trim() || s.enabled === false) return;
+        const type = detectType(s.url, s.type);
         collected.push({
-          id: `ep-src-${idx}`,
-          name: s.name || `Server ${idx + 1} (${s.quality || 'Auto'})`,
-          url: isYt ? getYouTubeEmbedUrl(s.url) || s.url : s.url,
-          type: isYt ? 'youtube' : isEmbed ? 'iframe' : 'video',
+          id: s.id || `ep-src-${idx}`,
+          name: s.name || s.title || `Server ${idx + 1}${s.quality ? ` (${s.quality})` : ''}`,
+          url: type === 'youtube' ? (getYouTubeEmbedUrl(s.url) || s.url) : s.url,
+          type,
           quality: s.quality
         });
       });
     }
 
-    // 4. Direct custom movie sources from Firestore
+    // 2. Direct custom movie sources added by user/admin
     if (activeContent?.sources && activeContent.sources.length > 0) {
       activeContent.sources.forEach((s: any, idx: number) => {
-        const url = s.url || s.streamUrl;
-        if (!url) return;
-        const isYt = !!getYouTubeId(url);
-        const isEmbed = isYt || s.type === 'iframe' || s.type === 'embed' || /embed|filemoon|streamtape|vidsrc/i.test(url);
+        const rawUrl = s.url || s.streamUrl;
+        if (!rawUrl || !rawUrl.trim() || s.enabled === false) return;
+        const type = detectType(rawUrl, s.type);
         collected.push({
-          id: `movie-src-${idx}`,
-          name: s.name || `Cinema Server ${idx + 1}`,
-          url: isYt ? getYouTubeEmbedUrl(url) || url : url,
-          type: isYt ? 'youtube' : isEmbed ? 'iframe' : 'video',
-          quality: s.quality
+          id: s.id || `movie-src-${idx}`,
+          name: s.title || s.name || `Server ${idx + 1}${s.quality ? ` (${s.quality})` : ''}`,
+          url: type === 'youtube' ? (getYouTubeEmbedUrl(rawUrl) || rawUrl) : rawUrl,
+          type,
+          quality: s.quality || activeContent.quality
         });
       });
     }
 
-    // 5. Universal Full Film Stream Servers (MultiEmbed, VidSrc, Embed.su, 2Embed)
-    // These stream the FULL REAL MOVIE or TV EPISODE, completely free of YouTube login blocks!
-    if (tmdbId || activeContent?.id) {
-      const targetId = tmdbId || activeContent?.id?.replace(/^tmdb_(tv_)?/, '');
-
-      // Server 1: MultiEmbed (Ultra Fast, High-Bandwidth 4K)
-      collected.push({
-        id: 'srv-multiembed',
-        name: 'Server 1 (MultiEmbed 4K)',
-        url: isTvShow
-          ? `https://multiembed.mov/?video_id=${targetId}&tmdb=1&s=${sNum}&e=${eNum}`
-          : `https://multiembed.mov/?video_id=${targetId}&tmdb=1`,
-        type: 'iframe',
-        quality: '4K Ultra HD'
-      });
-
-      // Server 2: VidSrc VIP (Multi-Audio & Sinhala/English Subs)
-      collected.push({
-        id: 'srv-vidsrc',
-        name: 'Server 2 (VidSrc VIP)',
-        url: isTvShow
-          ? `https://vidsrc.to/embed/tv/${targetId}/${sNum}/${eNum}`
-          : `https://vidsrc.to/embed/movie/${targetId}`,
-        type: 'iframe',
-        quality: '1080p FHD'
-      });
-
-      // Server 3: Embed.su (Ultra-Reliable CDN)
-      collected.push({
-        id: 'srv-embedsu',
-        name: 'Server 3 (Embed.su)',
-        url: isTvShow
-          ? `https://embed.su/embed/tv/${targetId}/${sNum}/${eNum}`
-          : `https://embed.su/embed/movie/${targetId}`,
-        type: 'iframe',
-        quality: '1080p'
-      });
-
-      // Server 4: 2Embed Mirror
-      collected.push({
-        id: 'srv-2embed',
-        name: 'Server 4 (2Embed Mirror)',
-        url: isTvShow
-          ? `https://www.2embed.cc/embedtv/${targetId}&s=${sNum}&e=${eNum}`
-          : `https://www.2embed.cc/embed/${targetId}`,
-        type: 'iframe',
-        quality: 'Auto'
-      });
-    }
-
-    // 6. Direct MP4 / HLS master video if provided on content
-    if ((activeContent as any)?.videoUrl) {
-      const vUrl = (activeContent as any).videoUrl;
-      const isYt = !!getYouTubeId(vUrl);
-      if (!isYt) {
+    // 3. Single videoUrl added by user
+    const directVid = (activeEpisode as any)?.videoUrl || (activeContent as any)?.videoUrl;
+    if (directVid && typeof directVid === 'string' && directVid.trim()) {
+      if (!collected.some(c => c.url === directVid.trim())) {
+        const type = detectType(directVid);
         collected.push({
-          id: 'content-video-url',
-          name: 'Direct 4K Master Feed',
-          url: vUrl,
-          type: 'video',
-          quality: '4K Master'
+          id: 'movie-video-url',
+          name: collected.length === 0 ? 'Server 1 (Direct 4K)' : `Server ${collected.length + 1} (Direct 4K)`,
+          url: type === 'youtube' ? (getYouTubeEmbedUrl(directVid) || directVid) : directVid,
+          type,
+          quality: '4K Ultra HD'
         });
       }
     }
 
-    if ((activeContent as any)?.embedUrl) {
-      collected.push({
-        id: 'content-embed-url',
-        name: 'VIP Stream Embed',
-        url: (activeContent as any).embedUrl,
-        type: 'iframe'
-      });
+    // 4. Single embedUrl added by user
+    const directEmbed = (activeEpisode as any)?.embedUrl || (activeContent as any)?.embedUrl;
+    if (directEmbed && typeof directEmbed === 'string' && directEmbed.trim()) {
+      if (!collected.some(c => c.url === directEmbed.trim())) {
+        collected.push({
+          id: 'movie-embed-url',
+          name: collected.length === 0 ? 'Server 1 (Embed Stream)' : `Server ${collected.length + 1} (VIP Embed)`,
+          url: directEmbed.trim(),
+          type: 'iframe',
+          quality: '1080p FHD'
+        });
+      }
     }
 
-    // 7. Official YouTube Trailer (ALWAYS AT THE END, LABELED AS TRAILER ONLY)
+    // 5. Explicit prop src passed directly
+    if (src && src.trim()) {
+      const existingIdx = collected.findIndex(c => c.url === src.trim());
+      if (existingIdx === -1) {
+        const type = detectType(src);
+        collected.unshift({
+          id: 'prop-src-selected',
+          name: type === 'youtube' ? 'Trailer' : `Server 1 (Selected)`,
+          url: type === 'youtube' ? (getYouTubeEmbedUrl(src) || src) : src,
+          type,
+          quality: '4K Ultra HD'
+        });
+      }
+    }
+
+    // 6. Official YouTube Trailer (if added on content and not already in list)
     if (activeContent?.trailerYoutubeId) {
       const embedUrl = getYouTubeEmbedUrl(activeContent.trailerYoutubeId);
-      if (embedUrl) {
+      if (embedUrl && !collected.some(c => c.url === embedUrl)) {
         collected.push({
           id: 'official-trailer',
-          name: 'Trailer (Preview Only)',
+          name: 'Watch Trailer (Preview)',
           url: embedUrl,
-          type: 'youtube'
+          type: 'youtube',
+          quality: 'HD'
         });
       }
     }
 
-    // Fallback demo video if list is still empty
+    // 7. Fallback ONLY if user has added ZERO links for this title yet
     if (collected.length === 0) {
       collected.push({
-        id: 'default-demo',
-        name: 'Cinexus Demo Feed',
+        id: 'no-server-notice',
+        name: 'Demo Stream (No Links Configured)',
         url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        type: 'video'
+        type: 'video',
+        quality: '4K Demo'
       });
     }
 
     setSources(collected);
-    setActiveSourceIndex(0);
+
+    // If explicit src passed, ensure that source is selected
+    if (src && src.trim()) {
+      const matchIdx = collected.findIndex(c => c.url === src.trim() || c.url === getYouTubeEmbedUrl(src));
+      if (matchIdx !== -1) {
+        setActiveSourceIndex(matchIdx);
+      } else {
+        setActiveSourceIndex(0);
+      }
+    } else {
+      setActiveSourceIndex(0);
+    }
+
     setPlaybackError(null);
     setIframeError(false);
   }, [src, activeContent, activeEpisode]);
@@ -347,13 +337,32 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
     };
   }, [currentSource]);
 
-  // Fullscreen Listener
+  // Cross-browser Fullscreen Listener
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      const isNative = !!(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).mozFullScreenElement ||
+        (document as any).msFullscreenElement
+      );
+      setIsFullscreen(isNative);
+      if (!isNative) {
+        setIsCssFullscreen(false);
+        document.body.style.overflow = '';
+      }
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
   }, []);
 
   // Sync Video Duration, Time, and Continue Watching
@@ -514,16 +523,100 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
     }
   };
 
-  // Fullscreen
+  // Fullscreen Engine (Cross-Browser Native + Full-Viewport CSS with Horizontal & Vertical orientation)
   const toggleFullscreen = () => {
-    const container = containerRef.current;
-    if (!container) return;
-    if (!document.fullscreenElement) {
-      container.requestFullscreen?.().catch(() => {});
+    const container = containerRef.current as any;
+    const video = videoRef.current as any;
+
+    if (!isFullscreenActive) {
+      // 1. Enter CSS Fullscreen Mode
+      setIsCssFullscreen(true);
+      document.body.style.overflow = 'hidden';
+
+      // 2. Request native fullscreen across WebKit, Blink, Gecko, iOS
+      try {
+        if (container?.requestFullscreen) {
+          container.requestFullscreen().catch(() => {});
+        } else if (container?.webkitRequestFullscreen) {
+          container.webkitRequestFullscreen();
+        } else if (container?.mozRequestFullScreen) {
+          container.mozRequestFullScreen();
+        } else if (container?.msRequestFullscreen) {
+          container.msRequestFullscreen();
+        } else if (video?.webkitEnterFullscreen) {
+          video.webkitEnterFullscreen();
+        }
+      } catch (err) {
+        console.warn('Native fullscreen blocked or unavailable, using CSS full-viewport mode:', err);
+      }
+
+      // Try orientation lock to horizontal
+      if (fullscreenOrientation === 'horizontal') {
+        try {
+          (screen.orientation as any)?.lock?.('landscape')?.catch(() => {});
+        } catch {}
+      }
     } else {
-      document.exitFullscreen?.().catch(() => {});
+      // Exit Fullscreen
+      setIsCssFullscreen(false);
+      document.body.style.overflow = '';
+
+      try {
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        } else if ((document as any).webkitFullscreenElement) {
+          (document as any).webkitExitFullscreen();
+        } else if ((document as any).mozFullScreenElement) {
+          (document as any).mozCancelFullScreen();
+        } else if ((document as any).msFullscreenElement) {
+          (document as any).msExitFullscreen();
+        }
+      } catch (err) {}
+
+      try {
+        (screen.orientation as any)?.unlock?.();
+      } catch {}
     }
   };
+
+  // Switch Orientation between Horizontal (Landscape Cinema) and Vertical (Portrait Theater)
+  const toggleOrientation = () => {
+    const next = fullscreenOrientation === 'horizontal' ? 'vertical' : 'horizontal';
+    setFullscreenOrientation(next);
+
+    try {
+      if (next === 'horizontal') {
+        (screen.orientation as any)?.lock?.('landscape')?.catch(() => {});
+      } else {
+        (screen.orientation as any)?.lock?.('portrait')?.catch(() => {});
+      }
+    } catch {}
+  };
+
+  // Escape key listener for CSS fullscreen
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isCssFullscreen) {
+        setIsCssFullscreen(false);
+        document.body.style.overflow = '';
+        try {
+          (screen.orientation as any)?.unlock?.();
+        } catch {}
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [isCssFullscreen]);
+
+  // Clean up body overflow on unmount
+  useEffect(() => {
+    return () => {
+      document.body.style.overflow = '';
+      try {
+        (screen.orientation as any)?.unlock?.();
+      } catch {}
+    };
+  }, []);
 
   // Theater View
   const toggleTheater = () => {
@@ -629,22 +722,34 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
       ref={containerRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => isPlaying && setShowControls(false)}
-      className={`relative bg-black rounded-3xl overflow-hidden shadow-2xl transition-all select-none group ${
-        isTheater ? 'w-full max-w-7xl mx-auto aspect-video' : 'w-full aspect-video'
-      } ${isFullscreen ? 'h-screen w-screen rounded-none' : ''}`}
+      className={`relative bg-black transition-all select-none group flex items-center justify-center ${
+        isFullscreenActive
+          ? 'fixed inset-0 z-[999999] w-screen h-screen rounded-none m-0 p-0 overflow-hidden'
+          : isTheater
+          ? 'w-full max-w-7xl mx-auto aspect-video rounded-3xl overflow-hidden shadow-2xl'
+          : 'w-full aspect-video rounded-3xl overflow-hidden shadow-2xl'
+      } ${
+        isFullscreenActive && fullscreenOrientation === 'vertical'
+          ? 'flex-col justify-center'
+          : ''
+      }`}
       style={{
-        boxShadow: '0 0 50px rgba(212, 175, 55, 0.15)'
+        boxShadow: isFullscreenActive ? 'none' : '0 0 50px rgba(212, 175, 55, 0.15)'
       }}
     >
       {/* 1. EMBED / IFRAME PLAYER (FileMoon, YouTube, Streamtape) */}
       {currentSource?.type === 'iframe' || currentSource?.type === 'youtube' ? (
-        <div className="relative w-full h-full bg-black">
+        <div className={`relative bg-black flex items-center justify-center transition-all ${
+          isFullscreenActive && fullscreenOrientation === 'vertical'
+            ? 'w-full h-full max-w-lg aspect-[9/16]'
+            : 'w-full h-full'
+        }`}>
           <iframe
             ref={iframeRef}
             src={currentSource.url}
             title={activeContent?.title || 'Cinexus Stream'}
             className="w-full h-full border-0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowFullScreen
             onError={() => setIframeError(true)}
           />
@@ -681,7 +786,11 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
             onEnded?.();
           }}
           playsInline
-          className="w-full h-full object-contain cursor-pointer"
+          className={`cursor-pointer transition-all object-contain ${
+            isFullscreenActive && fullscreenOrientation === 'vertical'
+              ? 'w-full h-full max-w-lg aspect-[9/16]'
+              : 'w-full h-full'
+          }`}
           crossOrigin="anonymous"
         >
           {availableSubtitles.map((sub) => (
@@ -714,14 +823,15 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
         </div>
       )}
 
-      {/* Top Left Close/Back Button */}
-      {onClose && (
+      {/* Top Left Close/Back Button or Exit Fullscreen */}
+      {(onClose || isFullscreenActive) && (
         <button
-          onClick={onClose}
-          className="absolute top-4 left-4 z-40 p-2.5 rounded-full bg-black/60 hover:bg-black text-white hover:text-[#D4AF37] border border-white/10 transition-all cursor-pointer backdrop-blur-md"
-          title="Exit Player"
+          onClick={isFullscreenActive ? toggleFullscreen : onClose}
+          className="absolute top-4 left-4 z-40 p-2.5 rounded-full bg-black/75 hover:bg-black text-white hover:text-[#D4AF37] border border-white/20 transition-all cursor-pointer backdrop-blur-md shadow-xl flex items-center gap-1.5"
+          title={isFullscreenActive ? "Exit Fullscreen (F)" : "Exit Player"}
         >
-          <ArrowLeft className="w-5 h-5" />
+          {isFullscreenActive ? <Minimize className="w-5 h-5 text-[#D4AF37]" /> : <ArrowLeft className="w-5 h-5" />}
+          {isFullscreenActive && <span className="text-[11px] font-bold text-white pr-1">Exit</span>}
         </button>
       )}
 
@@ -1030,13 +1140,29 @@ export const CinexusPlayer: React.FC<CinexusPlayerProps> = ({
                 <PictureInPicture className="w-4 h-4" />
               </button>
 
+              {/* Orientation Switcher (Horizontal & Vertical) */}
+              <button
+                type="button"
+                onClick={toggleOrientation}
+                className={`p-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  fullscreenOrientation === 'vertical' ? 'text-[#D4AF37] bg-[#D4AF37]/15' : 'text-zinc-400 hover:text-white'
+                }`}
+                title={`Orientation: ${fullscreenOrientation === 'horizontal' ? 'Horizontal (Landscape Cinema)' : 'Vertical (Portrait Theater)'} - Click to switch`}
+              >
+                <RotateCw className="w-4 h-4" />
+                <span className="text-[10px] uppercase font-bold hidden md:inline">
+                  {fullscreenOrientation === 'horizontal' ? 'Horizontal' : 'Vertical'}
+                </span>
+              </button>
+
               {/* Fullscreen */}
               <button
+                type="button"
                 onClick={toggleFullscreen}
                 className="p-1.5 text-zinc-400 hover:text-[#D4AF37] transition-colors cursor-pointer"
-                title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
+                title={isFullscreenActive ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
               >
-                {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+                {isFullscreenActive ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
               </button>
             </div>
 

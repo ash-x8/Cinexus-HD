@@ -39,10 +39,80 @@ export const WatchPage: React.FC = () => {
   const [relatedMovies, setRelatedMovies] = useState<MovieItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [activeServer, setActiveServer] = useState<string>('multiembed');
+  const [activeServerIndex, setActiveServerIndex] = useState(0);
 
   const seasonNum = season ? parseInt(season, 10) : 1;
   const episodeNum = episode ? parseInt(episode, 10) : 1;
+
+  // Extract strictly the servers the user / admin has actually added links for
+  const userAddedServers = React.useMemo(() => {
+    if (!content) return [];
+    const target = currentEpisode || content;
+    const list: { id: string; name: string; url: string; quality?: string }[] = [];
+
+    // 1. Sources array from admin/firestore
+    if (target.sources && Array.isArray(target.sources)) {
+      target.sources.forEach((s: any, idx: number) => {
+        const rawUrl = s.url || s.streamUrl;
+        if (rawUrl && typeof rawUrl === 'string' && rawUrl.trim() !== '' && s.enabled !== false) {
+          list.push({
+            id: s.id || `custom-server-${idx}`,
+            name: s.title || s.name || `Server ${list.length + 1}${s.quality ? ` (${s.quality})` : ''}`,
+            url: rawUrl.trim(),
+            quality: s.quality
+          });
+        }
+      });
+    }
+
+    // 2. Direct videoUrl added by user
+    const directVideoUrl = (target as any).videoUrl;
+    if (directVideoUrl && typeof directVideoUrl === 'string' && directVideoUrl.trim()) {
+      if (!list.some((s) => s.url === directVideoUrl.trim())) {
+        list.push({
+          id: 'video-url-server',
+          name: list.length === 0 ? 'Server 1 (Direct 4K)' : `Server ${list.length + 1} (Direct 4K)`,
+          url: directVideoUrl.trim(),
+          quality: '4K Ultra HD'
+        });
+      }
+    }
+
+    // 3. Direct embedUrl added by user
+    if ((target as any).embedUrl && typeof (target as any).embedUrl === 'string' && (target as any).embedUrl.trim()) {
+      const eUrl = (target as any).embedUrl.trim();
+      if (!list.some((s) => s.url === eUrl)) {
+        list.push({
+          id: 'embed-url-server',
+          name: list.length === 0 ? 'Server 1 (VIP Embed)' : `Server ${list.length + 1} (VIP Embed)`,
+          url: eUrl,
+          quality: '1080p FHD'
+        });
+      }
+    }
+
+    // 4. Direct streamUrl added by user
+    if ((target as any).streamUrl && typeof (target as any).streamUrl === 'string' && (target as any).streamUrl.trim()) {
+      const sUrl = (target as any).streamUrl.trim();
+      if (!list.some((s) => s.url === sUrl)) {
+        list.push({
+          id: 'stream-url-server',
+          name: list.length === 0 ? 'Server 1 (Stream Feed)' : `Server ${list.length + 1} (Stream Feed)`,
+          url: sUrl,
+          quality: 'Auto'
+        });
+      }
+    }
+
+    return list;
+  }, [content, currentEpisode]);
+
+  // Reset active server index when content or episode changes
+  useEffect(() => {
+    setActiveServerIndex(0);
+  }, [content?.id, currentEpisode?.id]);
+
+  const activeServer = userAddedServers[activeServerIndex] || userAddedServers[0];
 
   useEffect(() => {
     if (!slug) return;
@@ -180,33 +250,7 @@ export const WatchPage: React.FC = () => {
     }
   };
 
-  // Determine Target IDs for streaming servers
-  const targetId = content.tmdbId || (content.id.startsWith('tmdb_') ? content.id.replace(/^tmdb_(tv_)?/, '') : content.id);
-  const isTv = content.mediaType === 'tv' || (content.mediaType as any) === 'series' || content.mediaType === 'anime';
-
-  // Server URL generator
-  const getServerUrl = (serverType: string) => {
-    switch (serverType) {
-      case 'multiembed':
-        return isTv
-          ? `https://multiembed.mov/?video_id=${targetId}&tmdb=1&s=${seasonNum}&e=${episodeNum}`
-          : `https://multiembed.mov/?video_id=${targetId}&tmdb=1`;
-      case 'vidsrc':
-        return isTv
-          ? `https://vidsrc.to/embed/tv/${targetId}/${seasonNum}/${episodeNum}`
-          : `https://vidsrc.to/embed/movie/${targetId}`;
-      case 'embedsu':
-        return isTv
-          ? `https://embed.su/embed/tv/${targetId}/${seasonNum}/${episodeNum}`
-          : `https://embed.su/embed/movie/${targetId}`;
-      case '2embed':
-        return isTv
-          ? `https://www.2embed.cc/embedtv/${targetId}&s=${seasonNum}&e=${episodeNum}`
-          : `https://www.2embed.cc/embed/${targetId}`;
-      default:
-        return undefined;
-    }
-  };
+  const isTv = content.mediaType === 'tv' || (content.mediaType as any) === 'series' || content.mediaType === 'anime' || episodes.length > 0;
 
   return (
     <div className="min-h-screen bg-[#07090e] text-white pb-24 selection:bg-[#D4AF37] selection:text-black">
@@ -243,7 +287,7 @@ export const WatchPage: React.FC = () => {
           <CinexusPlayer
             content={content}
             episode={currentEpisode}
-            src={getServerUrl(activeServer)}
+            src={activeServer?.url}
             onClose={() => navigate(`/movie/${content.slug || content.id}`)}
             onNextEpisode={handleNextEpisode}
             onPrevEpisode={handlePrevEpisode}
@@ -252,45 +296,57 @@ export const WatchPage: React.FC = () => {
           />
         </div>
 
-        {/* Streaming Server Switcher Bar */}
-        <div className="mt-4 p-4 rounded-2xl bg-[#0e121b] border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[#D4AF37] flex items-center justify-center shrink-0">
-              <Server className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <span>Cinema Streaming Servers</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        {/* Streaming Server Switcher Bar: STRICTLY user-added links only */}
+        {userAddedServers.length > 0 ? (
+          <div className="mt-4 p-4 rounded-2xl bg-[#0e121b] border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[#D4AF37] flex items-center justify-center shrink-0">
+                <Server className="w-4 h-4" />
               </div>
-              <p className="text-[11px] text-zinc-400">
-                If playback buffers or lags on one server, click another server to switch instantly.
-              </p>
+              <div>
+                <div className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <span>Available Streaming Servers ({userAddedServers.length})</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                </div>
+                <p className="text-[11px] text-zinc-400">
+                  Switch between the verified stream servers configured for this title.
+                </p>
+              </div>
+            </div>
+
+            {/* Server Selection Buttons: ONLY the ones the admin added */}
+            <div className="flex flex-wrap items-center gap-2">
+              {userAddedServers.map((srv, idx) => (
+                <button
+                  key={srv.id}
+                  onClick={() => setActiveServerIndex(idx)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeServerIndex === idx
+                      ? 'bg-gradient-to-r from-[#D4AF37] to-amber-500 text-black shadow-lg shadow-amber-950/40'
+                      : 'bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/5'
+                  }`}
+                >
+                  {srv.name}
+                </button>
+              ))}
             </div>
           </div>
-
-          {/* Server Selection Buttons */}
-          <div className="flex flex-wrap items-center gap-2">
-            {[
-              { id: 'multiembed', label: 'Server 1: MultiEmbed (4K)' },
-              { id: 'vidsrc', label: 'Server 2: VidSrc VIP' },
-              { id: 'embedsu', label: 'Server 3: Embed.su HD' },
-              { id: '2embed', label: 'Server 4: 2Embed Mirror' }
-            ].map((srv) => (
-              <button
-                key={srv.id}
-                onClick={() => setActiveServer(srv.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeServer === srv.id
-                    ? 'bg-gradient-to-r from-[#D4AF37] to-amber-500 text-black shadow-lg shadow-amber-950/40'
-                    : 'bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/5'
-                }`}
-              >
-                {srv.label}
-              </button>
-            ))}
+        ) : (
+          <div className="mt-4 p-4 rounded-2xl bg-amber-950/20 border border-amber-500/30 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-[#D4AF37] shrink-0" />
+              <div>
+                <div className="text-xs font-bold text-white">No Custom Streaming Links Configured Yet</div>
+                <p className="text-[11px] text-zinc-400">
+                  Add streaming sources (MP4, HLS, FileMoon, or Embed link) in the Admin Panel to enable streaming.
+                </p>
+              </div>
+            </div>
+            {content.trailerYoutubeId && (
+              <span className="text-xs text-[#D4AF37] font-bold">Showing Trailer Preview</span>
+            )}
           </div>
-        </div>
+        )}
 
         {/* Under-Player Metadata & Rich Cast Ecosystem */}
         <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">

@@ -11,7 +11,7 @@ import {
   Bookmark
 } from 'lucide-react';
 import { MovieItem, WatchProgress } from '../types';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 export interface MovieCardProps {
   movie: MovieItem;
@@ -32,6 +32,7 @@ export const MovieCard: React.FC<MovieCardProps> = ({
   onToggleWatchlist,
   watchProgress
 }) => {
+  const navigate = useNavigate();
   const [isHovered, setIsHovered] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
@@ -40,6 +41,21 @@ export const MovieCard: React.FC<MovieCardProps> = ({
 
   const inWatchlist = isInWatchlist ? isInWatchlist(movie.id) : false;
   const targetWatchUrl = `/watch/${movie.slug || movie.id}`;
+
+  // Clicking anywhere on the movie card immediately opens/plays the movie
+  const handleCardClick = (e: React.MouseEvent) => {
+    // If user clicked sub-buttons like Watchlist or Info, let those handle it
+    const target = e.target as HTMLElement;
+    if (target.closest('button[data-subaction]')) {
+      return;
+    }
+
+    if (onPlayMovie) {
+      onPlayMovie(movie);
+    } else {
+      navigate(targetWatchUrl);
+    }
+  };
 
   // 3D Card Hover Tilt Micro-interaction
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -64,6 +80,7 @@ export const MovieCard: React.FC<MovieCardProps> = ({
     <div
       ref={cardRef}
       id={`movie-card-${movie.id}`}
+      onClick={handleCardClick}
       className="relative flex-shrink-0 group cursor-pointer w-44 sm:w-52 md:w-56 select-none transition-transform duration-300"
       onMouseEnter={() => setIsHovered(true)}
       onMouseMove={handleMouseMove}
@@ -189,6 +206,7 @@ export const MovieCard: React.FC<MovieCardProps> = ({
 
             {onToggleWatchlist && (
               <button
+                data-subaction="true"
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleWatchlist(movie);
@@ -206,6 +224,7 @@ export const MovieCard: React.FC<MovieCardProps> = ({
 
             {onOpenDetails && (
               <button
+                data-subaction="true"
                 onClick={(e) => {
                   e.stopPropagation();
                   onOpenDetails(movie);

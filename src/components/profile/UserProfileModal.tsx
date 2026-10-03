@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { MovieItem, WatchProgress } from '../../types';
+import { AvatarCropperModal } from './AvatarCropperModal';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -56,6 +57,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Preferences
@@ -103,14 +106,28 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   );
   const watchlistCount = Array.isArray(watchlist) ? watchlist.length : 0;
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setErrorMessage(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCropImageSrc(reader.result as string);
+      setCropModalOpen(true);
+    };
+    reader.readAsDataURL(file);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleCropComplete = async (croppedDataUrl: string, croppedBlob: Blob) => {
+    setErrorMessage(null);
     setUploadLoading(true);
     try {
-      const downloadUrl = await uploadAvatar(file);
+      const downloadUrl = await uploadAvatar(croppedBlob);
       setEditAvatar(downloadUrl);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -546,6 +563,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         </div>
 
       </div>
+
+      {/* Interactive Avatar Cropper Modal */}
+      <AvatarCropperModal
+        isOpen={cropModalOpen}
+        imageSrc={cropImageSrc}
+        onClose={() => setCropModalOpen(false)}
+        onCropComplete={handleCropComplete}
+      />
+
     </div>
   );
 };

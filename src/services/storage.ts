@@ -97,7 +97,7 @@ export async function getMediaFiles(): Promise<MediaFile[]> {
 
 export async function uploadUserProfilePhoto(
   userId: string,
-  file: File,
+  file: File | Blob,
   onProgress?: UploadProgressCallback
 ): Promise<string> {
   const maxBytes = 8 * 1024 * 1024;
@@ -105,35 +105,46 @@ export async function uploadUserProfilePhoto(
     throw new Error('Avatar image exceeds 8MB maximum size limit.');
   }
 
-  const fileExt = file.name.split('.').pop() || 'jpg';
+  const fileExt = (file as File).name ? (file as File).name.split('.').pop() || 'jpg' : 'jpg';
   const storagePath = `users/${userId}/avatars/${Date.now()}.${fileExt}`;
   const storageRef = ref(storage, storagePath);
 
-  const uploadTask = uploadBytesResumable(storageRef, file, {
-    contentType: file.type,
-    customMetadata: { userId, type: 'avatar' }
-  });
+  try {
+    const uploadTask = uploadBytesResumable(storageRef, file, {
+      contentType: file.type || 'image/jpeg',
+      customMetadata: { userId, type: 'avatar' }
+    });
 
-  return new Promise((resolve, reject) => {
-    uploadTask.on(
-      'state_changed',
-      (snapshot) => {
-        const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-        if (onProgress) {
-          onProgress(percent, snapshot.bytesTransferred, snapshot.totalBytes);
+    return await new Promise<string>((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+          if (onProgress) {
+            onProgress(percent, snapshot.bytesTransferred, snapshot.totalBytes);
+          }
+        },
+        (error) => reject(error),
+        async () => {
+          try {
+            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve(downloadUrl);
+          } catch (err) {
+            reject(err);
+          }
         }
-      },
-      (error) => reject(error),
-      async () => {
-        try {
-          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve(downloadUrl);
-        } catch (err) {
-          reject(err);
-        }
-      }
-    );
-  });
+      );
+    });
+  } catch (storageErr) {
+    console.warn('[Firebase Storage] Primary upload failed, using optimized Base64 fallback:', storageErr);
+    // Fallback: convert to Data URL
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (e) => reject(e);
+      reader.readAsDataURL(file);
+    });
+  }
 }
 
 export async function uploadSubtitleFile(

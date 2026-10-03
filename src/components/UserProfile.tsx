@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { WatchProgress, MovieItem } from '../types';
 import { useNavigate, Link } from 'react-router-dom';
+import { AvatarCropperModal } from './profile/AvatarCropperModal';
 
 const PRESET_AVATARS = [
   { id: 'av-1', label: 'Gold Cinephile', url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80' },
@@ -52,51 +53,64 @@ export const UserProfile: React.FC = () => {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // File Picker Upload to Firebase Storage with Fallback
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // File Picker Trigger: Opens Interactive Cropper Modal
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user?.id) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      setUpdateError('Image is too large. Please select a photo under 5MB.');
+    if (file.size > 15 * 1024 * 1024) {
+      setUpdateError('Image is too large. Please select a photo under 15MB.');
       return;
     }
 
+    setUpdateError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCropImageSrc(reader.result as string);
+      setCropModalOpen(true);
+    };
+    reader.readAsDataURL(file);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleCropComplete = async (croppedDataUrl: string, croppedBlob: Blob) => {
+    if (!user?.id) return;
     setIsUploadingImage(true);
     setUpdateError(null);
     setUpdateSuccess(false);
 
     try {
-      const storageRef = ref(storage, `avatars/${user.id}_${Date.now()}`);
-      let downloadUrl = '';
+      let downloadUrl = croppedDataUrl;
 
+      // 1. Attempt upload to Firebase Storage
       try {
-        const snapshot = await uploadBytes(storageRef, file, {
-          contentType: file.type || 'image/jpeg'
+        const storageRef = ref(storage, `users/${user.id}/avatars/${Date.now()}.jpg`);
+        const snapshot = await uploadBytes(storageRef, croppedBlob, {
+          contentType: 'image/jpeg'
         });
         downloadUrl = await getDownloadURL(snapshot.ref);
       } catch (storageErr) {
-        console.warn('[UserProfile] Firebase Storage error or unprovisioned, using fallback Data URL:', storageErr);
-        downloadUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
+        console.warn('[UserProfile] Storage upload failed, using optimized Base64 fallback:', storageErr);
+        downloadUrl = croppedDataUrl;
       }
 
       setAvatarUrl(downloadUrl);
 
-      // Update Firebase Auth profile
+      // 2. Update Firebase Auth profile
       if (auth.currentUser) {
         await updateProfile(auth.currentUser, {
           photoURL: downloadUrl
         });
       }
 
-      // Update Firestore user document
+      // 3. Update Firestore user document
       await setDoc(
         doc(db, 'users', user.id),
         {
@@ -110,13 +124,10 @@ export const UserProfile: React.FC = () => {
       setUpdateSuccess(true);
       setTimeout(() => setUpdateSuccess(false), 3500);
     } catch (err: any) {
-      console.error('[UserProfile] Failed to upload avatar image:', err);
-      setUpdateError(err.message || 'Failed to upload profile photo.');
+      console.error('[UserProfile] Failed to save cropped avatar:', err);
+      setUpdateError(err.message || 'Failed to save cropped avatar.');
     } finally {
       setIsUploadingImage(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
     }
   };
 
@@ -867,6 +878,14 @@ export const UserProfile: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Interactive Avatar Cropper Modal */}
+      <AvatarCropperModal
+        isOpen={cropModalOpen}
+        imageSrc={cropImageSrc}
+        onClose={() => setCropModalOpen(false)}
+        onCropComplete={handleCropComplete}
+      />
 
     </div>
   );
